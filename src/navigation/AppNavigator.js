@@ -3,14 +3,15 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import OnboardingScreen from '../screens/OnboardingScreen';
-import DashboardScreen from '../screens/DashboardScreen';
+import ActivityDetailScreen from '../screens/ActivityDetailScreen';
+import MainTabs from './MainTabs';
 
 const Stack = createNativeStackNavigator();
 
-// Route names — centralized to avoid magic strings
 export const Routes = {
   ONBOARDING: 'Onboarding',
-  DASHBOARD: 'Dashboard',
+  MAIN: 'Main',
+  ACTIVITY_DETAIL: 'ActivityDetail',
 };
 
 export default function AppNavigator() {
@@ -20,18 +21,32 @@ export default function AppNavigator() {
         initialRouteName={Routes.ONBOARDING}
         screenOptions={{
           headerShown: false,
-          animation: 'slide_from_right',
           contentStyle: { backgroundColor: '#F5F0E8' },
         }}
       >
+        {/* Onboarding — full screen entry */}
         <Stack.Screen
           name={Routes.ONBOARDING}
           component={OnboardingScreen}
+          options={{ animation: 'fade' }}
         />
+
+        {/* Main app with bottom tabs */}
         <Stack.Screen
-          name={Routes.DASHBOARD}
-          component={DashboardScreen}
+          name={Routes.MAIN}
+          component={MainTabs}
           options={{ animation: 'fade_from_bottom' }}
+        />
+
+        {/* Activity detail — bottom sheet modal */}
+        <Stack.Screen
+          name={Routes.ACTIVITY_DETAIL}
+          component={ActivityDetailScreen}
+          options={{
+            presentation: 'modal',
+            animation: 'slide_from_bottom',
+            contentStyle: { backgroundColor: 'transparent' },
+          }}
         />
       </Stack.Navigator>
     </NavigationContainer>

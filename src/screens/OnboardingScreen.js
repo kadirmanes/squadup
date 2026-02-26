@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
 import { Routes } from '../navigation/AppNavigator';
+import { useTrip } from '../context/TripContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -185,6 +186,7 @@ function InterestChip({ option, selected, onToggle }) {
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function OnboardingScreen({ navigation }) {
+  const { startTrip } = useTrip();
   const [destination, setDestination] = useState('');
   const [days, setDays] = useState(3);
   const [accommodation, setAccommodation] = useState('caravan');
@@ -203,15 +205,14 @@ export default function OnboardingScreen({ navigation }) {
 
   const handleStart = () => {
     if (!canProceed) return;
-    navigation.navigate(Routes.DASHBOARD, {
-      preferences: {
-        destination: destination.trim(),
-        days,
-        accommodationType: accommodation,
-        budget,
-        interests,
-      },
+    startTrip({
+      destination: destination.trim(),
+      days,
+      accommodationType: accommodation,
+      budget,
+      interests,
     });
+    navigation.navigate(Routes.MAIN);
   };
 
   return (

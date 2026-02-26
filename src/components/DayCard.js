@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Animated,
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
@@ -29,11 +28,15 @@ const TAG_COLORS = {
   default:    { bg: '#F5F5F5', text: '#616161' },
 };
 
-function ActivityRow({ activity, isLast }) {
+function ActivityRow({ activity, isLast, onPress }) {
   const tagStyle = TAG_COLORS[activity.tag] || TAG_COLORS.default;
 
   return (
-    <View style={styles.activityRow}>
+    <TouchableOpacity
+      style={styles.activityRow}
+      onPress={() => onPress && onPress(activity)}
+      activeOpacity={onPress ? 0.7 : 1}
+    >
       {/* Timeline line */}
       <View style={styles.timelineCol}>
         <View style={styles.timelineDot} />
@@ -56,12 +59,15 @@ function ActivityRow({ activity, isLast }) {
           )}
         </View>
         <Text style={styles.activityTitle}>{activity.title}</Text>
+        {onPress && (
+          <Text style={styles.tapHint}>Detay için dokun →</Text>
+        )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
-export default function DayCard({ dayPlan, isExpanded: initialExpanded = false }) {
+export default function DayCard({ dayPlan, isExpanded: initialExpanded = false, onActivityPress }) {
   const [expanded, setExpanded] = useState(initialExpanded);
 
   const { day, title, subtitle, activities = [], estimatedCost } = dayPlan;
@@ -98,6 +104,7 @@ export default function DayCard({ dayPlan, isExpanded: initialExpanded = false }
               key={`${day}-${idx}`}
               activity={activity}
               isLast={idx === activities.length - 1}
+              onPress={onActivityPress}
             />
           ))}
         </View>
@@ -236,5 +243,11 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weight.medium,
     color: Colors.textPrimary,
     lineHeight: 20,
+  },
+  tapHint: {
+    fontSize: 10,
+    color: Colors.primary,
+    marginTop: 3,
+    fontWeight: Typography.weight.medium,
   },
 });

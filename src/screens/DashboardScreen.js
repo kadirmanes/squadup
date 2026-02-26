@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -10,51 +10,24 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
-import { generateRoute, PREMIUM_FEATURES } from '../utils/routeGenerator';
+import { PREMIUM_FEATURES } from '../utils/routeGenerator';
 import BudgetTracker from '../components/BudgetTracker';
 import DayCard from '../components/DayCard';
 import AccommodationBadge from '../components/AccommodationBadge';
+import { useTrip } from '../context/TripContext';
+import { Routes } from '../navigation/AppNavigator';
 
-// ─── Accommodation label helpers ──────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const ACCOM_META = {
-  caravan: {
-    icon: '🚐',
-    routeNote: 'Kamping & Su Noktaları Öncelikli',
-    color: Colors.caravan,
-  },
-  camping: {
-    icon: '⛺',
-    routeNote: 'Ücretsiz Doğa Alanları Öncelikli',
-    color: Colors.camping,
-  },
-  hotel: {
-    icon: '🏨',
-    routeNote: 'Şehir Merkezi & Butik Oteller Öncelikli',
-    color: Colors.hotel,
-  },
+  caravan: { icon: '🚐', routeNote: 'Kamping & Su Noktaları Öncelikli', color: Colors.caravan },
+  camping: { icon: '⛺', routeNote: 'Ücretsiz Doğa Alanları Öncelikli',  color: Colors.camping },
+  hotel:   { icon: '🏨', routeNote: 'Şehir Merkezi & Butik Oteller',      color: Colors.hotel  },
 };
 
-// ─── Premium Feature Teaser ───────────────────────────────────────────────────
+const BUDGET_LABELS = { ekonomik: 'Ekonomik', standart: 'Standart', lux: 'Lüks' };
 
-function PremiumTeaser({ feature }) {
-  return (
-    <View style={pStyles.teaser}>
-      <View style={pStyles.teaserLeft}>
-        <Text style={pStyles.lockIcon}>🔒</Text>
-        <View>
-          <Text style={pStyles.featureName}>{feature.name}</Text>
-          <Text style={pStyles.featureDesc}>{feature.description}</Text>
-        </View>
-      </View>
-      <TouchableOpacity style={pStyles.unlockBtn} activeOpacity={0.85}>
-        <Text style={pStyles.unlockText}>Premium</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-// ─── Stat Card ────────────────────────────────────────────────────────────────
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function StatCard({ emoji, label, value, color }) {
   return (
@@ -66,114 +39,144 @@ function StatCard({ emoji, label, value, color }) {
   );
 }
 
+function PremiumTeaser({ feature }) {
+  return (
+    <View style={pStyles.teaser}>
+      <View style={pStyles.left}>
+        <Text style={pStyles.lock}>🔒</Text>
+        <View>
+          <Text style={pStyles.name}>{feature.name}</Text>
+          <Text style={pStyles.desc}>{feature.description}</Text>
+        </View>
+      </View>
+      <TouchableOpacity style={pStyles.btn} activeOpacity={0.85}>
+        <Text style={pStyles.btnText}>Premium</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
-export default function DashboardScreen({ navigation, route }) {
-  const preferences = route?.params?.preferences || {
-    destination: 'Kapadokya',
-    days: 3,
-    accommodationType: 'caravan',
-    budget: 'standart',
-    interests: [],
-  };
+export default function DashboardScreen({ navigation }) {
+  const { preferences, tripData, resetTrip } = useTrip();
 
-  const [expandedDay, setExpandedDay] = useState(1);
+  // No trip created yet → show empty state
+  if (!preferences || !tripData) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.empty}>
+          <Text style={styles.emptyEmoji}>🧭</Text>
+          <Text style={styles.emptyTitle}>Rota hazır değil</Text>
+          <Text style={styles.emptySubtitle}>
+            Onboarding ekranından bir seyahat planı oluştur.
+          </Text>
+          <TouchableOpacity
+            style={styles.emptyBtn}
+            onPress={() => navigation.navigate(Routes.ONBOARDING)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.emptyBtnText}>Rota Oluştur →</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
-  // Generate route plan (memoized — won't re-run unless preferences change)
-  const { days: dayPlans, totalBudget, meta } = useMemo(
-    () => generateRoute(preferences),
-    [preferences]
-  );
-
+  const { days: dayPlans, totalBudget } = tripData;
   const accomMeta = ACCOM_META[preferences.accommodationType] || ACCOM_META.caravan;
+  const budgetLabel = BUDGET_LABELS[preferences.budget] || 'Standart';
+  const totalActivities = dayPlans.reduce((s, d) => s + d.activities.length, 0);
 
-  const budgetLabelMap = { ekonomik: 'Ekonomik', standart: 'Standart', lux: 'Lüks' };
-  const budgetLabel = budgetLabelMap[preferences.budget] || 'Standart';
+  const handleActivityPress = (activity, dayPlan) => {
+    navigation.navigate(Routes.ACTIVITY_DETAIL, {
+      activity,
+      dayTitle: dayPlan.title,
+    });
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
-
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Top Bar ── */}
+        {/* ── Header ── */}
         <View style={styles.topBar}>
+          <View>
+            <Text style={styles.topGreeting}>Gezi Planın 🗓️</Text>
+            <Text style={styles.topDest}>{preferences.destination}</Text>
+          </View>
           <TouchableOpacity
-            style={styles.backBtn}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
+            style={styles.resetBtn}
+            onPress={() => {
+              resetTrip();
+              navigation.navigate(Routes.ONBOARDING);
+            }}
+            activeOpacity={0.8}
           >
-            <Text style={styles.backIcon}>←</Text>
+            <Text style={styles.resetText}>🔄</Text>
           </TouchableOpacity>
-          <Text style={styles.topTitle}>Gezi Planım</Text>
-          <View style={styles.topRight} />
         </View>
 
         {/* ── Hero Card ── */}
         <View style={[styles.heroCard, Shadow.md]}>
           <View style={styles.heroTop}>
             <View>
-              <Text style={styles.destinationLabel}>Hedef</Text>
-              <Text style={styles.destinationName}>{preferences.destination}</Text>
+              <Text style={styles.destLabel}>Hedef</Text>
+              <Text style={styles.destName}>{preferences.destination}</Text>
             </View>
-            <Text style={styles.heroAccomIcon}>{accomMeta.icon}</Text>
+            <Text style={styles.heroIcon}>{accomMeta.icon}</Text>
           </View>
 
-          <View style={styles.heroBadgeRow}>
+          <View style={styles.heroBadges}>
             <AccommodationBadge type={preferences.accommodationType} size="lg" />
-            <View style={styles.routeNoteBadge}>
+            <View style={styles.routeNote}>
               <Text style={styles.routeNoteText}>{accomMeta.routeNote}</Text>
             </View>
           </View>
 
           <View style={styles.heroDivider} />
 
-          {/* Quick stats */}
           <View style={styles.statsRow}>
-            <StatCard emoji="📅" label="Gün" value={`${preferences.days}`} color={Colors.primary} />
-            <StatCard emoji="💰" label="Bütçe" value={budgetLabel} color={Colors.accent} />
-            <StatCard
-              emoji="🏕️"
-              label="Aktivite"
-              value={`${dayPlans.reduce((sum, d) => sum + d.activities.length, 0)}`}
-              color={Colors.secondary}
-            />
+            <StatCard emoji="📅" label="Gün"      value={`${preferences.days}`}  color={Colors.primary} />
+            <StatCard emoji="💰" label="Bütçe"    value={budgetLabel}             color={Colors.accent} />
+            <StatCard emoji="⚡" label="Aktivite" value={`${totalActivities}`}    color={Colors.secondary} />
           </View>
         </View>
 
-        {/* ── Budget Tracker Widget ── */}
+        {/* ── Budget Tracker ── */}
         <View style={styles.widgetHeader}>
-          <Text style={styles.widgetTitle}>Bütçe Özeti</Text>
+          <Text style={styles.widgetTitle}>Bütçe Takibi</Text>
         </View>
         <BudgetTracker totalBudget={totalBudget} />
 
-        {/* ── Day-by-Day Timeline ── */}
+        {/* ── Timeline ── */}
         <View style={styles.widgetHeader}>
           <Text style={styles.widgetTitle}>Günlük Plan</Text>
-          <Text style={styles.widgetSubtitle}>Karta dokun, detayları gör</Text>
+          <Text style={styles.widgetSub}>Aktiviteye dokun → Detaylar</Text>
         </View>
 
         {dayPlans.map((dayPlan) => (
           <DayCard
             key={dayPlan.day}
             dayPlan={dayPlan}
-            isExpanded={dayPlan.day === expandedDay}
+            isExpanded={dayPlan.day === 1}
+            onActivityPress={(activity) => handleActivityPress(activity, dayPlan)}
           />
         ))}
 
-        {/* ── Premium Features ── */}
+        {/* ── Premium Teasers ── */}
         <View style={styles.widgetHeader}>
-          <View style={styles.premiumHeaderRow}>
+          <View style={styles.premiumRow}>
             <Text style={styles.widgetTitle}>Premium Özellikler</Text>
             <View style={styles.premiumBadge}>
               <Text style={styles.premiumBadgeText}>👑 Yükselt</Text>
             </View>
           </View>
         </View>
-
         <View style={[styles.premiumCard, Shadow.sm]}>
           {Object.values(PREMIUM_FEATURES).map((feat, idx, arr) => (
             <React.Fragment key={feat.id}>
@@ -183,16 +186,7 @@ export default function DashboardScreen({ navigation, route }) {
           ))}
         </View>
 
-        {/* ── Replan Button ── */}
-        <TouchableOpacity
-          style={[styles.replanBtn, Shadow.sm]}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.replanText}>🔄 Yeni Rota Oluştur</Text>
-        </TouchableOpacity>
-
-        <View style={{ height: 40 }} />
+        <View style={{ height: 32 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -201,12 +195,43 @@ export default function DashboardScreen({ navigation, route }) {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
+  safeArea: { flex: 1, backgroundColor: Colors.background },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 20 },
+
+  // Empty state
+  empty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xxl,
+  },
+  emptyEmoji: { fontSize: 56 },
+  emptyTitle: {
+    fontSize: Typography.size.xl,
+    fontWeight: Typography.weight.bold,
+    color: Colors.textPrimary,
+  },
+  emptySubtitle: {
+    fontSize: Typography.size.base,
+    color: Colors.textTertiary,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  emptyBtn: {
+    marginTop: Spacing.md,
+    backgroundColor: Colors.primary,
+    borderRadius: Radius.xl,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.sm + 4,
+    ...Shadow.sm,
+  },
+  emptyBtnText: {
+    fontSize: Typography.size.base,
+    fontWeight: Typography.weight.bold,
+    color: '#FFFFFF',
+  },
 
   // Top bar
   topBar: {
@@ -214,9 +239,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm + 4,
+    paddingVertical: Spacing.md,
   },
-  backBtn: {
+  topGreeting: {
+    fontSize: Typography.size.sm,
+    color: Colors.textTertiary,
+    fontWeight: Typography.weight.medium,
+  },
+  topDest: {
+    fontSize: Typography.size.xxl,
+    fontWeight: Typography.weight.extrabold,
+    color: Colors.textPrimary,
+    letterSpacing: -0.5,
+  },
+  resetBtn: {
     width: 40,
     height: 40,
     borderRadius: Radius.md,
@@ -225,16 +261,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...Shadow.sm,
   },
-  backIcon: {
-    fontSize: 20,
-    color: Colors.textPrimary,
-  },
-  topTitle: {
-    fontSize: Typography.size.md,
-    fontWeight: Typography.weight.bold,
-    color: Colors.textPrimary,
-  },
-  topRight: { width: 40 },
+  resetText: { fontSize: 18 },
 
   // Hero card
   heroCard: {
@@ -250,7 +277,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: Spacing.md,
   },
-  destinationLabel: {
+  destLabel: {
     fontSize: Typography.size.xs,
     color: Colors.textTertiary,
     fontWeight: Typography.weight.medium,
@@ -258,23 +285,21 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 4,
   },
-  destinationName: {
+  destName: {
     fontSize: Typography.size.xxl,
     fontWeight: Typography.weight.extrabold,
     color: Colors.textPrimary,
     letterSpacing: -0.5,
   },
-  heroAccomIcon: {
-    fontSize: 36,
-  },
-  heroBadgeRow: {
+  heroIcon: { fontSize: 36 },
+  heroBadges: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
     flexWrap: 'wrap',
     marginBottom: Spacing.md,
   },
-  routeNoteBadge: {
+  routeNote: {
     flex: 1,
     backgroundColor: Colors.primaryFaded,
     borderRadius: Radius.full,
@@ -291,12 +316,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.borderLight,
     marginBottom: Spacing.md,
   },
-  statsRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
+  statsRow: { flexDirection: 'row', gap: Spacing.sm },
 
-  // Widget headers
+  // Widget header
   widgetHeader: {
     paddingHorizontal: Spacing.md,
     marginBottom: Spacing.sm,
@@ -306,14 +328,14 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weight.bold,
     color: Colors.textPrimary,
   },
-  widgetSubtitle: {
+  widgetSub: {
     fontSize: Typography.size.xs,
     color: Colors.textTertiary,
     marginTop: 2,
   },
 
   // Premium
-  premiumHeaderRow: {
+  premiumRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
@@ -341,27 +363,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.borderLight,
     marginHorizontal: Spacing.md,
   },
-
-  // Replan
-  replanBtn: {
-    marginHorizontal: Spacing.md,
-    height: 52,
-    borderRadius: Radius.xl,
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    backgroundColor: Colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: Spacing.sm,
-  },
-  replanText: {
-    fontSize: Typography.size.base,
-    fontWeight: Typography.weight.semibold,
-    color: Colors.primary,
-  },
 });
-
-// ─── Sub-component styles ─────────────────────────────────────────────────────
 
 const statStyles = StyleSheet.create({
   card: {
@@ -378,10 +380,7 @@ const statStyles = StyleSheet.create({
     fontWeight: Typography.weight.extrabold,
     color: Colors.textPrimary,
   },
-  label: {
-    fontSize: Typography.size.xs,
-    color: Colors.textTertiary,
-  },
+  label: { fontSize: Typography.size.xs, color: Colors.textTertiary },
 });
 
 const pStyles = StyleSheet.create({
@@ -392,31 +391,22 @@ const pStyles = StyleSheet.create({
     padding: Spacing.md,
     gap: Spacing.sm,
   },
-  teaserLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    flex: 1,
-  },
-  lockIcon: { fontSize: 22 },
-  featureName: {
+  left: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flex: 1 },
+  lock: { fontSize: 22 },
+  name: {
     fontSize: Typography.size.sm,
     fontWeight: Typography.weight.bold,
     color: Colors.textPrimary,
     marginBottom: 2,
   },
-  featureDesc: {
-    fontSize: Typography.size.xs,
-    color: Colors.textTertiary,
-    lineHeight: 16,
-  },
-  unlockBtn: {
+  desc: { fontSize: Typography.size.xs, color: Colors.textTertiary, lineHeight: 16 },
+  btn: {
     backgroundColor: Colors.accent,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: Radius.full,
   },
-  unlockText: {
+  btnText: {
     fontSize: Typography.size.xs,
     fontWeight: Typography.weight.bold,
     color: '#FFFFFF',
