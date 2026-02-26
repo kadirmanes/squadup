@@ -1,12 +1,28 @@
-import React from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import React, { Suspense } from 'react';
+import { View, Text, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Colors } from '../constants/colors';
 import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
 import DashboardScreen from '../screens/DashboardScreen';
-import MapScreen from '../screens/MapScreen';
 import ChatScreen from '../screens/ChatScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+
+// Lazy-load MapScreen so react-native-maps only loads when user opens the Map tab
+const LazyMapScreen = React.lazy(() => import('../screens/MapScreen'));
+
+function MapScreen(props) {
+  return (
+    <Suspense
+      fallback={
+        <View style={{ flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={Colors.primary} size="large" />
+        </View>
+      }
+    >
+      <LazyMapScreen {...props} />
+    </Suspense>
+  );
+}
 
 const Tab = createBottomTabNavigator();
 
