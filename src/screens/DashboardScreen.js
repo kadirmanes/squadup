@@ -14,6 +14,7 @@ import { PREMIUM_FEATURES } from '../utils/routeGenerator';
 import BudgetTracker from '../components/BudgetTracker';
 import DayCard from '../components/DayCard';
 import AccommodationBadge from '../components/AccommodationBadge';
+import WeatherWidget from '../components/WeatherWidget';
 import { useTrip } from '../context/TripContext';
 import { Routes } from '../navigation/AppNavigator';
 
@@ -146,6 +147,13 @@ export default function DashboardScreen({ navigation }) {
             <StatCard emoji="⚡" label="Aktivite" value={`${totalActivities}`}    color={Colors.secondary} />
           </View>
         </View>
+
+        {/* ── Weather Widget ── */}
+        <View style={styles.widgetHeader}>
+          <Text style={styles.widgetTitle}>Hava Durumu ☀️</Text>
+          <Text style={styles.widgetSub}>Seyahat dönemine ait tahmin</Text>
+        </View>
+        <WeatherWidget destination={preferences.destination} />
 
         {/* ── Budget Tracker ── */}
         <View style={styles.widgetHeader}>

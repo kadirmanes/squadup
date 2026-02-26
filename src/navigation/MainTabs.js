@@ -5,14 +5,23 @@ import { Colors } from '../constants/colors';
 import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
 import DashboardScreen from '../screens/DashboardScreen';
 import MapScreen from '../screens/MapScreen';
+import ChatScreen from '../screens/ChatScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 
 const Tab = createBottomTabNavigator();
 
+const SCREEN_MAP = {
+  Plan:    DashboardScreen,
+  Map:     MapScreen,
+  Chat:    ChatScreen,
+  Profile: ProfileScreen,
+};
+
 const TABS = [
-  { name: 'Plan', label: 'Plan', emoji: '🗓️', emojiActive: '📋' },
-  { name: 'Map',  label: 'Harita', emoji: '🗺️', emojiActive: '🗺️' },
-  { name: 'Profile', label: 'Profil', emoji: '🧭', emojiActive: '🧭' },
+  { name: 'Plan',    label: 'Plan',    emoji: '🗓️', emojiActive: '📋' },
+  { name: 'Map',     label: 'Harita',  emoji: '🗺️', emojiActive: '🗺️' },
+  { name: 'Chat',    label: 'AI',      emoji: '🤖', emojiActive: '🤖' },
+  { name: 'Profile', label: 'Profil',  emoji: '🧭', emojiActive: '🧭' },
 ];
 
 function TabIcon({ emoji, label, focused }) {
@@ -37,10 +46,7 @@ export default function MainTabs() {
         <Tab.Screen
           key={tab.name}
           name={tab.name}
-          component={
-            tab.name === 'Plan' ? DashboardScreen :
-            tab.name === 'Map'  ? MapScreen       : ProfileScreen
-          }
+          component={SCREEN_MAP[tab.name]}
           options={{
             tabBarIcon: ({ focused }) => (
               <TabIcon
