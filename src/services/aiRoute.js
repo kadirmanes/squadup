@@ -11,7 +11,8 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getVisitedPlaces } from '../utils/storage';
+import { getVisitedPlaces, getVehicleProfile } from '../utils/storage';
+import { buildWeatherPromptContext } from './weatherService';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL         = 'claude-haiku-4-5-20251001';
@@ -45,6 +46,134 @@ const ACCOM_LABELS = {
   hotel:   'otel / pansiyon (butik otel, konakevi veya pansiyon)',
 };
 
+// ─── Vehicle type labels ───────────────────────────────────────────────────
+
+const VEHICLE_TYPE_LABELS = {
+  small_caravan:  'Küçük Karavan (<6m)',
+  medium_caravan: 'Orta Karavan (6-8m)',
+  large_caravan:  'Büyük Karavan (>8m)',
+  alcove:         'Alkoven (>8m, yüksek profil)',
+  tent:           'Çadır',
+  hotel:          'Otel',
+};
+
+// ─── Algorithm context builders (8, 9, 10) ────────────────────────────────
+
+function buildCaravanContext(profile) {
+  const { vehicleType, length, waterTank, solarPanel, persons = 2 } = profile;
+  const dailyUse   = 15 * persons; // L/day
+  const refillDays = waterTank ? Math.max(1, Math.floor(waterTank / dailyUse)) : 2;
+
+  const roadRule =
+    vehicleType === 'small_caravan'  ? 'Tüm yollar uygundur (<6m).' :
+    vehicleType === 'medium_caravan' ? 'Ana yollar ve devlet yolları tercih et (6-8m). Dar köy yollarından kaçın.' :
+    'Sadece otoyol ve geniş devlet yolları (>8m). Şehir merkezine girme, çevre yolunu kullan.';
+
+  const solarNote = solarPanel
+    ? '\n- Güneş paneli VAR: Bulutlu/yağmurlu günlerde "enerji tasarrufu modu" uyarısı ver, güneşli kampları tercih et.'
+    : '\n- Güneş paneli YOK: Elektrik bağlantısı olan karavan parklarını tercih et.';
+
+  const alkovWarning = vehicleType === 'alcove'
+    ? '\n- ALKOVEN: Yüksek profil nedeniyle köprü ve tünel yükseklik limitlerini kontrol et. Güçlü rüzgar (>30km/s) varsa seyahatten kaçın.'
+    : '';
+
+  return `
+KARAVAN PROFİLİ:
+- Araç: ${VEHICLE_TYPE_LABELS[vehicleType]}, ${length || '?'}m, ${waterTank || '?'}L su deposu, ${persons} kişi
+- Günlük su tüketimi: ~${dailyUse}L → Her ${refillDays} günde bir içme suyu dolum durağı rotaya ekle (aktiviteler arasında not olarak belirt)
+- Yol kısıtı: ${roadRule}${solarNote}${alkovWarning}
+- Konaklama seçeneklerinde karavan boyutuna uygun park alanı bilgisi ver.
+`;
+}
+
+function buildCampingContext(profile) {
+  const { persons = 2 } = profile;
+  return `
+ÇADIR KAMPİNG PROFİLİ (${persons} kişi):
+- GÜVENLİK: Gece sıcaklığı <5°C ise "uyku tulumu uyarısı" ver. Yağış/fırtına varsa alternatif korunaklı alan öner. Dere yatağı ve vadilerden uzak dur (sel riski).
+- KONFOR: Yakınında tuvalet/duş tesisi olan kamp alanlarını tercih et. Su kaynağına mesafeyi konaklama notunda belirt.
+- SOSYAL: Hafta sonu ise "yoğun olabilir" uyarısı ver. Ateş yakma izni olan alanları "(ateş izinli)" ile işaretle.
+`;
+}
+
+function buildHotelContext(profile, preferences) {
+  const { persons = 2 } = profile;
+  const { startDate } = preferences;
+  return `
+OTEL PROFİLİ (${persons} kişi):
+- CHECK-IN: Oteller genellikle 14:00-15:00 check-in. Günün son aktivitesi 17:00'ye kadar otel check-in içersin. activities'e "17:00 — Otel Check-in" aktivitesi ekle (tag: "Konaklama").
+- KAHVALTI: Konaklama seçeneğinin "note" alanında kahvaltı dahil mi belirt. Kahvaltı dahil ise sabah aktivitesi 09:30'dan başlayabilir.
+- OTOPARK: Konaklama note alanında otopark bilgisi ekle (ücretli/ücretsiz/yok).
+- AKTİVİTE PLANI: Aktiviteleri otele yakın (yürüme mesafesi) ve toplu taşıma ile ulaşılabilir seç.
+`;
+}
+
+// ─── Report builders (local computation) ─────────────────────────────────
+
+function buildVehicleReport(profile, tripDays) {
+  const { vehicleType, waterTank, solarPanel, length, persons = 2 } = profile;
+  const dailyUse   = 15 * persons;
+  const refillDays = waterTank ? Math.max(1, Math.floor(waterTank / dailyUse)) : 2;
+  const warnings   = [];
+
+  if (vehicleType === 'alcove') warnings.push('Alkoven: Köprü/tünel yükseklik sınırlarına dikkat');
+  if (!solarPanel)               warnings.push('Güneş paneli yok: Elektrikli kampları tercih et');
+  if (vehicleType === 'large_caravan' || vehicleType === 'alcove') warnings.push('Geniş araç: Şehir merkezine girmekten kaçın');
+
+  return {
+    vehicleType:        VEHICLE_TYPE_LABELS[vehicleType] || vehicleType,
+    length:             length ? `${length}m` : null,
+    estimatedWaterUsage: `${dailyUse}L/gün`,
+    nextWaterStop:      `Her ${refillDays} günde bir dolum gerekli`,
+    energyStatus:       solarPanel ? '☀️ Güneş paneli aktif' : '🔌 Elektrik bağlantısı gerekli',
+    roadRestriction:
+      vehicleType === 'small_caravan'  ? 'Tüm yollar' :
+      vehicleType === 'medium_caravan' ? 'Ana yollar (min 6m genişlik)' :
+      'Otoyol & geniş devlet yolları',
+    warnings,
+  };
+}
+
+function buildCampReport(profile) {
+  return {
+    safetyScore:      '⚠️ Gece hava koşullarını takip et',
+    comfortScore:     'Tuvalet/duş tesisi olan alanları tercih et',
+    nearbyFacilities: ['Tuvalet', 'Su kaynağı', 'Duş (varsa)'],
+    warnings:         ['Gece <5°C → uyku tulumu şart', 'Dere/vadi → sel riskine dikkat'],
+    fireAllowed:      null, // AI tarafından konaklama notunda belirtilir
+  };
+}
+
+function buildHotelReport(preferences) {
+  const { selectedCities, startDate } = preferences;
+  const cities = selectedCities || [];
+
+  const bookingLinks = cities.map((city, i) => {
+    const checkIn  = startDate ? addDays(startDate, i)     : '';
+    const checkOut = startDate ? addDays(startDate, i + 1) : '';
+    return {
+      city,
+      bookingLink:      `https://www.booking.com/search.html?ss=${encodeURIComponent(city)}&checkin=${checkIn}&checkout=${checkOut}&group_adults=2`,
+      googleHotelsLink: `https://www.google.com/travel/hotels/${encodeURIComponent(city)}?dates=${checkIn},${checkOut}`,
+    };
+  });
+
+  return {
+    checkInDeadline:    '17:00',
+    breakfastIncluded:  null, // belirsiz — AI tarafından dolduruluyor
+    parkingAvailable:   null,
+    cityLinks:          bookingLinks,
+  };
+}
+
+function addDays(dateStr, n) {
+  try {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() + n);
+    return d.toISOString().split('T')[0];
+  } catch (_) { return ''; }
+}
+
 // ─── Prompt builder ───────────────────────────────────────────────────────
 
 function buildPrompt(prefs) {
@@ -52,6 +181,7 @@ function buildPrompt(prefs) {
     startLocation, destination, startDate, endDate, days,
     accommodationType, budget, interests, includeMeals,
     selectedCities, visitedPlaces, previousCity,
+    vehicleProfile, weatherMap,
   } = prefs;
 
   const accomLabel  = ACCOM_LABELS[accommodationType] || accommodationType;
@@ -59,6 +189,22 @@ function buildPrompt(prefs) {
   const interestStr = (interests || []).length > 0 ? interests.join(', ') : 'genel keşif';
   const isCaravan   = accommodationType === 'caravan';
   const vehicleDesc = isCaravan ? 'karavan (ort. 70 km/h)' : 'araç (ort. 90 km/h)';
+
+  // Vehicle / accommodation algorithm context
+  let algorithmContext = '';
+  if (vehicleProfile?.vehicleType) {
+    const vt = vehicleProfile.vehicleType;
+    if (['small_caravan', 'medium_caravan', 'large_caravan', 'alcove'].includes(vt)) {
+      algorithmContext = buildCaravanContext(vehicleProfile);
+    } else if (vt === 'tent') {
+      algorithmContext = buildCampingContext(vehicleProfile);
+    } else if (vt === 'hotel') {
+      algorithmContext = buildHotelContext(vehicleProfile, prefs);
+    }
+  }
+
+  // Weather context
+  const weatherContext = weatherMap ? buildWeatherPromptContext(weatherMap) : '';
 
   const routeInstruction = selectedCities?.length
     ? `${selectedCities.join(' → ')} güzergahında ${days} günlük bir ${accomLabel} seyahati planla.`
@@ -87,7 +233,7 @@ ${routeInstruction}
 Tarihler: ${startDate} → ${endDate}
 Araç: ${vehicleDesc}
 Bütçe: ${budgetLabel}
-İlgi: ${interestStr}${visitedNote}${prevCityNote}
+İlgi: ${interestStr}${visitedNote}${prevCityNote}${weatherContext}${algorithmContext}
 
 YOLCULUK KURALLARI (ÇOK ÖNEMLİ):
 - 1. gün: yolculuk aktivitesi YOK, doğrudan gezi yap (başlangıç şehri).
@@ -183,8 +329,18 @@ const BATCH_SIZE = 5; // max days per API call
 export async function generateAIRoute(preferences, apiKey, onProgress) {
   if (!apiKey) throw new Error('API_KEY_MISSING');
 
-  const visitedPlaces = await getVisitedPlaces();
-  const prefs = { ...preferences, visitedPlaces };
+  // Load visited places + vehicle profile from storage
+  const [visitedPlaces, storedVehicleProfile] = await Promise.all([
+    getVisitedPlaces(),
+    getVehicleProfile(),
+  ]);
+
+  const prefs = {
+    ...preferences,
+    visitedPlaces,
+    // Prefer in-preferences vehicleProfile (set by onboarding this session) over stored
+    vehicleProfile: preferences.vehicleProfile || storedVehicleProfile || null,
+  };
 
   const cities = prefs.selectedCities;
 
@@ -349,7 +505,7 @@ const BUDGET_ESTIMATES = {
 };
 
 function normalizeAIResponse(route, preferences) {
-  const { days: totalDays, accommodationType = 'caravan', budget = 'standart' } = preferences;
+  const { days: totalDays, accommodationType = 'caravan', budget = 'standart', vehicleProfile, weatherMap } = preferences;
   const dailyCost = BUDGET_ESTIMATES[accommodationType]?.[budget] || 980;
 
   const dayPlans = route.map((day) => ({
@@ -368,10 +524,11 @@ function normalizeAIResponse(route, preferences) {
       address:     act.address || null,
     })),
     accommodationOptions: day.accommodationOptions || null,
-    // backward compat: first option as default
     accommodation: day.accommodationOptions?.[0] || day.accommodation || null,
     estimatedCost: dailyCost,
     coordinate:    { latitude: day.lat || 39.0, longitude: day.lng || 35.0 },
+    // Attach weather data for this city if available
+    weather: weatherMap?.[day.location] || null,
   }));
 
   const totalBudget = {
@@ -383,9 +540,26 @@ function normalizeAIResponse(route, preferences) {
     currency:      '₺',
   };
 
+  // ── Vehicle-specific reports ──
+  const vt = vehicleProfile?.vehicleType;
+  let vehicleReport = null;
+  let campReport    = null;
+  let hotelReport   = null;
+
+  if (vt && ['small_caravan', 'medium_caravan', 'large_caravan', 'alcove'].includes(vt)) {
+    vehicleReport = buildVehicleReport(vehicleProfile, dayPlans.length);
+  } else if (vt === 'tent') {
+    campReport = buildCampReport(vehicleProfile);
+  } else if (vt === 'hotel') {
+    hotelReport = buildHotelReport(preferences);
+  }
+
   return {
     days: dayPlans,
     totalBudget,
     meta: { ...preferences, aiGenerated: true, generatedAt: new Date().toISOString() },
+    vehicleReport,
+    campReport,
+    hotelReport,
   };
 }

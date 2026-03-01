@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,8 @@ import { Colors } from '../constants/colors';
 import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
 import { useTrip } from '../context/TripContext';
 import { getDestinationCoords, generateRouteWaypoints, generateWaypoints } from '../utils/geocoder';
+import { queryPOIs, POI_DEFS } from '../services/osmService';
+import { loadOsmCache, saveOsmCache } from '../utils/storage';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 const MAP_HEIGHT = SCREEN_H * 0.58;
@@ -64,11 +66,44 @@ function ActivityMarkerCallout({ activity }) {
   );
 }
 
+// ─── POI filter toggles ────────────────────────────────────────────────────
+
+function POIToggle({ def, enabled, onToggle }) {
+  return (
+    <TouchableOpacity
+      style={[poiStyles.toggle, enabled && { backgroundColor: def.color + '22', borderColor: def.color }]}
+      onPress={onToggle}
+      activeOpacity={0.75}
+    >
+      <Text style={poiStyles.toggleIcon}>{def.icon}</Text>
+      <Text style={[poiStyles.toggleLabel, enabled && { color: def.color }]}>{def.label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+const poiStyles = StyleSheet.create({
+  toggle:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface, marginRight: 6 },
+  toggleIcon:  { fontSize: 14 },
+  toggleLabel: { fontSize: 10, fontWeight: '600', color: Colors.textTertiary },
+  poiMarker:   { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#FFFFFF' },
+  poiIcon:     { fontSize: 14 },
+});
+
+// ─── Main Screen ──────────────────────────────────────────────────────────
+
 export default function MapScreen() {
   const { preferences, tripData } = useTrip();
   const mapRef = useRef(null);
   const [selectedDay, setSelectedDay] = useState(1);
   const [selectedActivity, setSelectedActivity] = useState(null);
+
+  // POI state
+  const [pois,        setPois]        = useState([]);
+  const [showPois,    setShowPois]    = useState(false);
+  const [loadingPois, setLoadingPois] = useState(false);
+  const [poiFilters,  setPoiFilters]  = useState(
+    () => Object.fromEntries(POI_DEFS.map((d) => [d.key, true]))
+  );
 
   const destination   = preferences?.destination   || 'Türkiye';
   const startLocation = preferences?.startLocation || destination;
@@ -104,20 +139,45 @@ export default function MapScreen() {
     }));
   }, [currentDayPlan, currentWaypoint]);
 
+  // Load POIs for selected day
+  const loadPoisForDay = useCallback(async (waypoint) => {
+    if (!waypoint) return;
+    const { latitude, longitude } = waypoint.coordinate;
+    const cacheKey = `${latitude.toFixed(2)},${longitude.toFixed(2)}`;
+    setLoadingPois(true);
+    try {
+      const cache = await loadOsmCache();
+      if (cache?.[cacheKey]) {
+        setPois(cache[cacheKey]);
+      } else {
+        const results = await queryPOIs(latitude, longitude);
+        setPois(results);
+        await saveOsmCache({ ...(cache || {}), [cacheKey]: results });
+      }
+    } catch (e) {
+      console.warn('[MapScreen] POI load error:', e.message);
+    }
+    setLoadingPois(false);
+  }, []);
+
   const handleDaySelect = (day) => {
     setSelectedDay(day);
     setSelectedActivity(null);
     const wp = waypoints.find((w) => w.day === day);
     if (wp && mapRef.current) {
       mapRef.current.animateToRegion(
-        {
-          ...wp.coordinate,
-          latitudeDelta: 0.08,
-          longitudeDelta: 0.08,
-        },
+        { ...wp.coordinate, latitudeDelta: 0.08, longitudeDelta: 0.08 },
         600
       );
     }
+    if (showPois && wp) loadPoisForDay(wp);
+  };
+
+  const handleTogglePois = () => {
+    const next = !showPois;
+    setShowPois(next);
+    if (next && currentWaypoint) loadPoisForDay(currentWaypoint);
+    if (!next) setPois([]);
   };
 
   if (!preferences) {
@@ -191,6 +251,23 @@ export default function MapScreen() {
               </Marker>
             );
           })}
+
+          {/* OSM POI markers */}
+          {showPois && pois
+            .filter((p) => poiFilters[p.type])
+            .map((poi, idx) => (
+              <Marker
+                key={`poi-${idx}`}
+                coordinate={{ latitude: poi.lat, longitude: poi.lng }}
+                anchor={{ x: 0.5, y: 0.5 }}
+                title={poi.name}
+                description={poi.label}
+              >
+                <View style={[poiStyles.poiMarker, { backgroundColor: poi.color }]}>
+                  <Text style={poiStyles.poiIcon}>{poi.icon}</Text>
+                </View>
+              </Marker>
+            ))}
         </MapView>
 
         {/* Overlay — route chip */}
@@ -199,6 +276,36 @@ export default function MapScreen() {
             {startLocation !== destination ? `${startLocation} → ${destination}` : `📍 ${destination}`}
           </Text>
         </View>
+
+        {/* POI toggle button */}
+        <TouchableOpacity
+          style={[styles.poiBtn, showPois && { backgroundColor: Colors.primary }]}
+          onPress={handleTogglePois}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.poiBtnText, showPois && { color: '#FFF' }]}>
+            {loadingPois ? '⏳' : '💧'} {showPois ? 'Noktaları Gizle' : 'Tesisler'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* POI filter row (visible when POIs are shown) */}
+        {showPois && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.poiFilterRow}
+            contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8 }}
+          >
+            {POI_DEFS.map((def) => (
+              <POIToggle
+                key={def.key}
+                def={def}
+                enabled={poiFilters[def.key]}
+                onToggle={() => setPoiFilters((prev) => ({ ...prev, [def.key]: !prev[def.key] }))}
+              />
+            ))}
+          </ScrollView>
+        )}
 
         {/* Selected activity callout */}
         {selectedActivity && (
@@ -290,6 +397,30 @@ const styles = StyleSheet.create({
     fontSize: Typography.size.sm,
     fontWeight: Typography.weight.semibold,
     color: Colors.textPrimary,
+  },
+
+  poiBtn: {
+    position: 'absolute',
+    top: Spacing.md,
+    right: Spacing.md,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs + 2,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  poiBtnText: {
+    fontSize: Typography.size.xs,
+    fontWeight: Typography.weight.semibold,
+    color: Colors.textSecondary,
+  },
+  poiFilterRow: {
+    position: 'absolute',
+    top: Spacing.md + 40,
+    left: 0,
+    right: 0,
+    maxHeight: 50,
   },
 
   calloutOverlay: {

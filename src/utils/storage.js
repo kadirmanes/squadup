@@ -47,3 +47,53 @@ export async function addVisitedPlace(title) {
     }
   } catch (_) {}
 }
+
+// ─── Vehicle profile ───────────────────────────────────────────────────────
+
+const VEHICLE_PROFILE_KEY = 'vehicle_profile';
+
+export async function saveVehicleProfile(profile) {
+  try {
+    await AsyncStorage.setItem(VEHICLE_PROFILE_KEY, JSON.stringify(profile));
+  } catch (_) {}
+}
+
+export async function getVehicleProfile() {
+  try {
+    const raw = await AsyncStorage.getItem(VEHICLE_PROFILE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) { return null; }
+}
+
+// ─── Weather API key ───────────────────────────────────────────────────────
+
+const WEATHER_KEY = 'weather_api_key';
+
+export async function saveWeatherApiKey(key) {
+  try { await AsyncStorage.setItem(WEATHER_KEY, key.trim()); } catch (_) {}
+}
+
+export async function getWeatherApiKey() {
+  try { return await AsyncStorage.getItem(WEATHER_KEY); } catch (_) { return null; }
+}
+
+// ─── OSM POI cache (24h TTL per coordinate key) ───────────────────────────
+
+const OSM_CACHE_KEY = 'osm_poi_cache';
+const OSM_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+export async function saveOsmCache(cacheObj) {
+  try {
+    await AsyncStorage.setItem(OSM_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: cacheObj }));
+  } catch (_) {}
+}
+
+export async function loadOsmCache() {
+  try {
+    const raw = await AsyncStorage.getItem(OSM_CACHE_KEY);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw);
+    if (Date.now() - ts > OSM_CACHE_TTL) return null;
+    return data;
+  } catch (_) { return null; }
+}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getWeatherIcon } from '../services/weatherService';
 import {
   View,
   Text,
@@ -172,7 +173,10 @@ function AccommodationCard({ accommodation }) {
 export default function DayCard({ dayPlan, isExpanded: initialExpanded = false, onActivityPress }) {
   const [expanded, setExpanded] = useState(initialExpanded);
 
-  const { day, title, subtitle, activities = [], estimatedCost, accommodation, accommodationOptions } = dayPlan;
+  const { day, title, subtitle, activities = [], estimatedCost, accommodation, accommodationOptions, weather } = dayPlan;
+
+  const weatherIcon = weather?.icon ? getWeatherIcon(weather.icon) : null;
+  const weatherDesc = weather ? `${weatherIcon} ${weather.temp}°C` : null;
 
   return (
     <View style={[styles.card, Shadow.sm]}>
@@ -187,7 +191,9 @@ export default function DayCard({ dayPlan, isExpanded: initialExpanded = false, 
         </View>
         <View style={styles.headerText}>
           <Text style={styles.dayTitle} numberOfLines={1}>{title}</Text>
-          <Text style={styles.daySubtitle}>{subtitle}</Text>
+          <Text style={styles.daySubtitle}>
+            {weatherDesc ? `${weatherDesc}  ` : ''}{subtitle}
+          </Text>
         </View>
         <View style={styles.headerRight}>
           <Text style={styles.costEstimate}>

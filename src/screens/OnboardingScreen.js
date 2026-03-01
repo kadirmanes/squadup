@@ -22,11 +22,151 @@ import { Colors } from '../constants/colors';
 import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
 import { Routes } from '../navigation/routes';
 import { useTrip } from '../context/TripContext';
+import { saveVehicleProfile } from '../utils/storage';
 
 const { width: W } = Dimensions.get('window');
 const CELL_SIZE = Math.floor((W - 32) / 7);
 
 // ─── Static options ────────────────────────────────────────────────────────
+
+// ─── Vehicle types (araç profili) ─────────────────────────────────────────
+
+export const VEHICLE_TYPES = [
+  { id: 'small_caravan',  accom: 'caravan', label: 'Küçük Karavan',  emoji: '🚐', desc: '< 6m — her yola uygun',       bg: '#E8F5E9', color: Colors.caravan, defaults: { length: 5,    waterTank: 80,  persons: 2 } },
+  { id: 'medium_caravan', accom: 'caravan', label: 'Orta Karavan',   emoji: '🚐', desc: '6–8m — ana yollar',           bg: '#E8F5E9', color: Colors.caravan, defaults: { length: 7,    waterTank: 130, persons: 4 } },
+  { id: 'large_caravan',  accom: 'caravan', label: 'Büyük Karavan',  emoji: '🚐', desc: '> 8m — geniş yollar',         bg: '#E8F5E9', color: Colors.caravan, defaults: { length: 9,    waterTank: 200, persons: 6 } },
+  { id: 'alcove',         accom: 'caravan', label: 'Alkoven',         emoji: '🚌', desc: '> 8m — yüksek profil',         bg: '#E8F5E9', color: Colors.caravan, defaults: { length: 8,    waterTank: 150, persons: 5 } },
+  { id: 'tent',           accom: 'camping', label: 'Çadır',           emoji: '⛺', desc: 'Doğada özgür konaklama',      bg: '#E0F2F1', color: Colors.camping, defaults: { length: null, waterTank: null, persons: 2 } },
+  { id: 'hotel',          accom: 'hotel',   label: 'Otel',            emoji: '🏨', desc: 'Şehir konforu',               bg: '#FFF8E1', color: Colors.hotel,   defaults: { length: null, waterTank: null, persons: 2 } },
+];
+
+const DEFAULT_VEHICLE_PROFILE = { vehicleType: null, length: null, waterTank: null, solarPanel: false, persons: 2 };
+
+// ─── NumberStepper helper ──────────────────────────────────────────────────
+
+function NumberStepper({ label, value, onChange, min, max, step = 1, unit = '' }) {
+  return (
+    <View style={nsStyles.row}>
+      <Text style={nsStyles.label}>{label}</Text>
+      <View style={nsStyles.controls}>
+        <TouchableOpacity style={nsStyles.btn} onPress={() => onChange(Math.max(min, value - step))} activeOpacity={0.7}>
+          <Text style={nsStyles.btnText}>−</Text>
+        </TouchableOpacity>
+        <Text style={nsStyles.value}>{value}{unit}</Text>
+        <TouchableOpacity style={nsStyles.btn} onPress={() => onChange(Math.min(max, value + step))} activeOpacity={0.7}>
+          <Text style={nsStyles.btnText}>+</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const nsStyles = StyleSheet.create({
+  row:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: Spacing.sm },
+  label:    { fontSize: Typography.size.base, color: Colors.textSecondary, flex: 1 },
+  controls: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  btn:      { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.primaryFaded, borderWidth: 1, borderColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
+  btnText:  { fontSize: 18, color: Colors.primary, fontWeight: '700', lineHeight: 22 },
+  value:    { fontSize: Typography.size.lg, fontWeight: Typography.weight.bold, color: Colors.textPrimary, minWidth: 56, textAlign: 'center' },
+});
+
+// ─── Step: Araç Profili ────────────────────────────────────────────────────
+
+function StepVehicle({ profile, onChange, includeMeals, onToggleMeals }) {
+  const { Switch } = require('react-native');
+  const selected = VEHICLE_TYPES.find((v) => v.id === profile.vehicleType);
+  const isCaravan = selected && selected.accom === 'caravan';
+
+  const selectType = (vt) => {
+    onChange({
+      ...profile,
+      vehicleType: vt.id,
+      length:    vt.defaults.length,
+      waterTank: vt.defaults.waterTank,
+      persons:   vt.defaults.persons,
+    });
+  };
+
+  return (
+    <View style={sStyles.stepContent}>
+      {/* 2-column vehicle type grid */}
+      <View style={vStyles.grid}>
+        {VEHICLE_TYPES.map((vt) => {
+          const sel = profile.vehicleType === vt.id;
+          return (
+            <TouchableOpacity
+              key={vt.id}
+              style={[vStyles.card, { backgroundColor: vt.bg }, sel && { borderColor: vt.color, borderWidth: 2, ...Shadow.sm }]}
+              onPress={() => selectType(vt)}
+              activeOpacity={0.8}
+            >
+              <Text style={vStyles.cardEmoji}>{vt.emoji}</Text>
+              <Text style={[vStyles.cardLabel, sel && { color: vt.color }]}>{vt.label}</Text>
+              <Text style={vStyles.cardDesc}>{vt.desc}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Detail fields — shown once a type is selected */}
+      {selected && (
+        <View style={[vStyles.detailBox, Shadow.sm]}>
+          <Text style={vStyles.detailTitle}>Detaylar (isteğe bağlı)</Text>
+          <NumberStepper label="Kaç kişilik?" value={profile.persons} onChange={(v) => onChange({ ...profile, persons: v })} min={1} max={12} unit=" kişi" />
+          {isCaravan && (
+            <>
+              <View style={vStyles.divider} />
+              <NumberStepper label="Araç uzunluğu" value={profile.length || selected.defaults.length} onChange={(v) => onChange({ ...profile, length: v })} min={3} max={15} step={0.5} unit=" m" />
+              <View style={vStyles.divider} />
+              <NumberStepper label="Su deposu" value={profile.waterTank || selected.defaults.waterTank} onChange={(v) => onChange({ ...profile, waterTank: v })} min={20} max={500} step={10} unit=" L" />
+              <View style={vStyles.divider} />
+              <View style={nsStyles.row}>
+                <Text style={nsStyles.label}>☀️ Güneş paneli var mı?</Text>
+                <Switch
+                  value={profile.solarPanel}
+                  onValueChange={(v) => onChange({ ...profile, solarPanel: v })}
+                  trackColor={{ false: Colors.border, true: Colors.primaryLight }}
+                  thumbColor={profile.solarPanel ? Colors.primary : Colors.textTertiary}
+                />
+              </View>
+            </>
+          )}
+        </View>
+      )}
+
+      {/* Meal toggle (same as accom step) */}
+      <TouchableOpacity
+        style={[sStyles.mealToggle, includeMeals && sStyles.mealToggleActive]}
+        onPress={() => onToggleMeals(!includeMeals)}
+        activeOpacity={0.8}
+      >
+        <Text style={sStyles.mealToggleEmoji}>🍽️</Text>
+        <View style={sStyles.mealToggleText}>
+          <Text style={sStyles.mealToggleLabel}>Restoran Önerileri</Text>
+          <Text style={sStyles.mealToggleDesc}>
+            {includeMeals ? 'Kahvaltı, öğle ve akşam planınıza dahil' : 'Yemeği kendim hallederim'}
+          </Text>
+        </View>
+        <View style={[sStyles.toggleSwitch, includeMeals && sStyles.toggleSwitchOn]}>
+          <View style={[sStyles.toggleThumb, includeMeals && sStyles.toggleThumbOn]} />
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const vStyles = StyleSheet.create({
+  grid:       { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  card:       { width: '48%', borderRadius: Radius.xl, borderWidth: 1.5, borderColor: 'transparent', padding: Spacing.md, gap: 4, alignItems: 'center' },
+  cardEmoji:  { fontSize: 28 },
+  cardLabel:  { fontSize: Typography.size.sm, fontWeight: Typography.weight.bold, color: Colors.textPrimary, textAlign: 'center' },
+  cardDesc:   { fontSize: 10, color: Colors.textTertiary, textAlign: 'center' },
+  detailBox:  { backgroundColor: Colors.surface, borderRadius: Radius.xl, padding: Spacing.md, gap: 0 },
+  detailTitle:{ fontSize: Typography.size.xs, fontWeight: Typography.weight.bold, color: Colors.textTertiary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: Spacing.xs },
+  divider:    { height: 1, backgroundColor: Colors.borderLight, marginVertical: 2 },
+});
+
+// ─── Accommodation options ─────────────────────────────────────────────────
 
 const ACCOMMODATION_OPTIONS = [
   { id: 'caravan', label: 'Karavan', emoji: '🚐', desc: 'Kamping & su noktaları öncelikli', bg: '#E8F5E9', color: Colors.caravan },
@@ -56,12 +196,13 @@ const TR_MONTHS     = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz
 const TR_DAYS_SHORT = ['Pt','Sa','Ça','Pe','Cu','Ct','Pz'];
 
 const STEPS = [
-  { key: 'startLocation', title: 'Nereden?',     subtitle: 'Yolculuğun başlangıç noktası', emoji: '🚩' },
-  { key: 'destination',   title: 'Nereye?',       subtitle: 'Hedef şehir veya bölge',       emoji: '🏁' },
-  { key: 'dates',         title: 'Ne Zaman?',     subtitle: 'Başlangıç ve bitiş tarihi',    emoji: '📅' },
-  { key: 'accom',         title: 'Konaklama',     subtitle: 'Seyahat stilini seç',          emoji: '🏕️' },
-  { key: 'budget',        title: 'Bütçe',         subtitle: 'Harcama tercihini belirle',    emoji: '💰' },
-  { key: 'interests',     title: 'İlgi Alanları', subtitle: 'Birden fazla seçebilirsin',    emoji: '✨' },
+  { key: 'startLocation', title: 'Nereden?',      subtitle: 'Yolculuğun başlangıç noktası',      emoji: '🚩' },
+  { key: 'destination',   title: 'Nereye?',        subtitle: 'Hedef şehir veya bölge',            emoji: '🏁' },
+  { key: 'dates',         title: 'Ne Zaman?',      subtitle: 'Başlangıç ve bitiş tarihi',         emoji: '📅' },
+  { key: 'accom',         title: 'Konaklama',      subtitle: 'Seyahat stilini seç',               emoji: '🏕️' },
+  { key: 'vehicle',       title: 'Araç Profili',   subtitle: 'Araç tipini ve detaylarını belirle', emoji: '🚐' },
+  { key: 'budget',        title: 'Bütçe',          subtitle: 'Harcama tercihini belirle',         emoji: '💰' },
+  { key: 'interests',     title: 'İlgi Alanları',  subtitle: 'Birden fazla seçebilirsin',         emoji: '✨' },
 ];
 
 // ─── Calendar Helpers ──────────────────────────────────────────────────────
@@ -374,10 +515,11 @@ export default function OnboardingScreen({ navigation }) {
   const [destination,   setDestination]   = useState('');
   const [startDate,     setStartDate]     = useState(null);
   const [endDate,       setEndDate]       = useState(null);
-  const [accommodation, setAccommodation] = useState('caravan');
-  const [budget,        setBudget]        = useState('standart');
-  const [interests,     setInterests]     = useState([]);
-  const [includeMeals,  setIncludeMeals]  = useState(true);
+  const [accommodation,  setAccommodation]  = useState('caravan');
+  const [vehicleProfile, setVehicleProfile] = useState(DEFAULT_VEHICLE_PROFILE);
+  const [budget,         setBudget]         = useState('standart');
+  const [interests,      setInterests]      = useState([]);
+  const [includeMeals,   setIncludeMeals]   = useState(true);
 
   const slideX  = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
@@ -407,7 +549,7 @@ export default function OnboardingScreen({ navigation }) {
       case 'startLocation': return startLocation.trim().length > 0;
       case 'destination':   return destination.trim().length > 0;
       case 'dates':         return startDate !== null && endDate !== null;
-      default:              return true;
+      default:              return true; // vehicle step is optional
     }
   }, [stepIndex, startLocation, destination, startDate, endDate]);
 
@@ -418,21 +560,29 @@ export default function OnboardingScreen({ navigation }) {
     if (!isLast) {
       animate(1, () => setStepIndex((i) => i + 1));
     } else {
+      // Derive accommodationType from vehicle profile if set, else from accom step
+      const vtDef = VEHICLE_TYPES.find((v) => v.id === vehicleProfile.vehicleType);
+      const resolvedAccom = vtDef ? vtDef.accom : accommodation;
+
+      // Save vehicle profile to AsyncStorage
+      const profileToSave = { ...vehicleProfile, resolvedAccommodationType: resolvedAccom };
+      saveVehicleProfile(profileToSave).catch(() => {});
+
       const prefs = {
         startLocation:     startLocation.trim(),
         destination:       destination.trim(),
         startDate:         startDate ? startDate.toISOString().split('T')[0] : null,
         endDate:           endDate   ? endDate.toISOString().split('T')[0]   : null,
         days:              computedDays,
-        accommodationType: accommodation,
+        accommodationType: resolvedAccom,
+        vehicleProfile:    profileToSave,
         budget,
         interests,
         includeMeals,
       };
-      // Navigate to GeneratingScreen — it handles AI call and then goes to MAIN
       navigation.navigate(Routes.GENERATING, { preferences: prefs });
     }
-  }, [canProceed, isLast, startLocation, destination, startDate, endDate, computedDays, accommodation, budget, interests]);
+  }, [canProceed, isLast, startLocation, destination, startDate, endDate, computedDays, accommodation, vehicleProfile, budget, interests, includeMeals]);
 
   const goBack = useCallback(() => {
     if (stepIndex > 0) animate(-1, () => setStepIndex((i) => i - 1));
@@ -450,6 +600,8 @@ export default function OnboardingScreen({ navigation }) {
         return <StepDates startDate={startDate} endDate={endDate} onDatesChange={(s, e) => { setStartDate(s); setEndDate(e); }} />;
       case 'accom':
         return <StepAccommodation value={accommodation} onChange={setAccommodation} includeMeals={includeMeals} onToggleMeals={setIncludeMeals} />;
+      case 'vehicle':
+        return <StepVehicle profile={vehicleProfile} onChange={setVehicleProfile} includeMeals={includeMeals} onToggleMeals={setIncludeMeals} />;
       case 'budget':
         return <StepBudget value={budget} onChange={setBudget} />;
       case 'interests':

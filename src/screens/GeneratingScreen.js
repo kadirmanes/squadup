@@ -18,6 +18,8 @@ import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
 import { Routes } from '../navigation/routes';
 import { useTrip } from '../context/TripContext';
 import { generateAIRoute, generateCityList, getApiKey, saveApiKey, API_KEY_STORAGE } from '../services/aiRoute';
+import { fetchWeatherForCities, getWeatherWarnings } from '../services/weatherService';
+import { getWeatherApiKey } from '../utils/storage';
 
 const STEPS = [
   'Güzergah analiz ediliyor...',
@@ -265,7 +267,24 @@ export default function GeneratingScreen({ navigation, route }) {
       const selectedArr = selCities ? Array.from(selCities) : null;
       const prefs = selectedArr ? { ...preferences, selectedCities: selectedArr } : preferences;
 
-      const result = await generateAIRoute(prefs, key, (msg) => setStatus(msg));
+      // Fetch weather for selected cities (optional — continues if API key not set)
+      let weatherMap = {};
+      try {
+        const weatherKey = await getWeatherApiKey();
+        if (weatherKey) {
+          setStatus('Hava durumu alınıyor...');
+          const citiesToFetch = selectedArr || [];
+          weatherMap = await fetchWeatherForCities(citiesToFetch, weatherKey);
+          const warnings = getWeatherWarnings(weatherMap);
+          if (warnings.length) {
+            console.log('[GeneratingScreen] Weather warnings:', warnings);
+          }
+        }
+      } catch (weatherErr) {
+        console.warn('[GeneratingScreen] Weather fetch failed (non-fatal):', weatherErr.message);
+      }
+
+      const result = await generateAIRoute({ ...prefs, weatherMap }, key, (msg) => setStatus(msg));
       setTripFromAI(preferences, result);
       navigation.replace(Routes.MAIN);
     } catch (err) {

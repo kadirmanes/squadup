@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,12 +6,16 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
 import { useTrip } from '../context/TripContext';
 import AccommodationBadge from '../components/AccommodationBadge';
+import { getWeatherApiKey, saveWeatherApiKey, getVehicleProfile } from '../utils/storage';
+import { VEHICLE_TYPES } from './OnboardingScreen';
 
 const ACCOM_EMOJI = { caravan: '🚐', camping: '⛺', hotel: '🏨' };
 const BUDGET_EMOJI = { ekonomik: '💚', standart: '✨', lux: '👑' };
@@ -72,8 +76,24 @@ function SettingRow({ emoji, label, description, hasToggle, value, onToggle, onP
 
 export default function ProfileScreen({ navigation }) {
   const { preferences, tripData, pastTrips, resetTrip } = useTrip();
-  const [notifications, setNotifications] = React.useState(true);
-  const [offlineMode, setOfflineMode] = React.useState(false);
+  const [notifications, setNotifications] = useState(true);
+  const [offlineMode, setOfflineMode]     = useState(false);
+  const [weatherKey,  setWeatherKey]      = useState('');
+  const [editingKey,  setEditingKey]      = useState(false);
+  const [vehicleProfile, setVehicleProfile] = useState(null);
+
+  useEffect(() => {
+    getWeatherApiKey().then((k) => setWeatherKey(k || ''));
+    getVehicleProfile().then(setVehicleProfile);
+  }, []);
+
+  const handleSaveWeatherKey = async () => {
+    await saveWeatherApiKey(weatherKey);
+    setEditingKey(false);
+    Alert.alert('Kaydedildi', 'Hava durumu API anahtarı kaydedildi.');
+  };
+
+  const vehicleTypeDef = VEHICLE_TYPES.find((v) => v.id === vehicleProfile?.vehicleType);
 
   const accomEmoji = ACCOM_EMOJI[preferences?.accommodationType] || '🧭';
   const totalDays = pastTrips.reduce((s, t) => s + t.days, 0);
@@ -174,6 +194,64 @@ export default function ProfileScreen({ navigation }) {
           <SettingRow emoji="🎨" label="Tema" description="Açık (Doğal)" onPress={() => {}} />
           <View style={styles.settingDivider} />
           <SettingRow emoji="📧" label="Geri Bildirim Gönder" onPress={() => {}} />
+        </View>
+
+        {/* Vehicle Profile Card */}
+        {vehicleProfile?.vehicleType && (
+          <>
+            <Text style={styles.sectionTitle}>Araç Profili</Text>
+            <View style={[styles.settingsCard, Shadow.sm]}>
+              <View style={settingStyles.row}>
+                <Text style={settingStyles.emoji}>{vehicleTypeDef?.emoji || '🚐'}</Text>
+                <View style={settingStyles.text}>
+                  <Text style={settingStyles.label}>{vehicleTypeDef?.label || vehicleProfile.vehicleType}</Text>
+                  <Text style={settingStyles.desc}>
+                    {[
+                      vehicleProfile.persons && `${vehicleProfile.persons} kişi`,
+                      vehicleProfile.length  && `${vehicleProfile.length}m`,
+                      vehicleProfile.waterTank && `${vehicleProfile.waterTank}L su`,
+                      vehicleProfile.solarPanel && '☀️ Güneş paneli',
+                    ].filter(Boolean).join(' · ')}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </>
+        )}
+
+        {/* API Keys Section */}
+        <Text style={styles.sectionTitle}>API Anahtarları</Text>
+        <View style={[styles.settingsCard, Shadow.sm]}>
+          <View style={apiStyles.row}>
+            <Text style={settingStyles.emoji}>🌤️</Text>
+            <View style={apiStyles.content}>
+              <Text style={settingStyles.label}>OpenWeatherMap</Text>
+              {editingKey ? (
+                <View style={apiStyles.inputRow}>
+                  <TextInput
+                    style={apiStyles.input}
+                    value={weatherKey}
+                    onChangeText={setWeatherKey}
+                    placeholder="API anahtarını gir..."
+                    placeholderTextColor={Colors.textTertiary}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    secureTextEntry
+                  />
+                  <TouchableOpacity style={apiStyles.saveBtn} onPress={handleSaveWeatherKey} activeOpacity={0.8}>
+                    <Text style={apiStyles.saveBtnText}>Kaydet</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <Text style={settingStyles.desc}>
+                  {weatherKey ? '●●●●●●●●' + weatherKey.slice(-4) : 'Ayarlanmadı — openweathermap.org'}
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity onPress={() => setEditingKey(!editingKey)} style={apiStyles.editBtn} activeOpacity={0.75}>
+              <Text style={apiStyles.editBtnText}>{editingKey ? 'İptal' : 'Düzenle'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Reset trip */}
@@ -336,6 +414,17 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     marginBottom: Spacing.sm,
   },
+});
+
+const apiStyles = StyleSheet.create({
+  row:       { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, gap: Spacing.sm },
+  content:   { flex: 1 },
+  inputRow:  { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: 4 },
+  input:     { flex: 1, height: 36, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: Spacing.sm, fontSize: Typography.size.sm, color: Colors.textPrimary },
+  saveBtn:   { backgroundColor: Colors.primary, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: 8 },
+  saveBtnText: { fontSize: Typography.size.sm, fontWeight: Typography.weight.bold, color: '#FFF' },
+  editBtn:   { paddingHorizontal: Spacing.sm },
+  editBtnText: { fontSize: Typography.size.sm, color: Colors.primary, fontWeight: Typography.weight.semibold },
 });
 
 const statStyles = StyleSheet.create({
