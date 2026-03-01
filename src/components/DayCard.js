@@ -26,6 +26,7 @@ const TAG_COLORS = {
   Macera:     { bg: '#FCE4EC', text: '#880E4F' },
   Keşif:      { bg: '#E8EAF6', text: '#1A237E' },
   Serbest:    { bg: '#FFF3E0', text: '#E65100' },
+  Yolculuk:   { bg: '#E3F2FD', text: '#0D47A1' },
   default:    { bg: '#F5F5F5', text: '#616161' },
 };
 

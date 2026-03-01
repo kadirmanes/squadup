@@ -76,6 +76,15 @@ const TAG_DETAILS = {
     nearby: ['Çarşı', 'Kafe', 'Hediyelik Eşya'],
     description: 'Serbest zaman — şehrin çarşısını, pazarını veya alışveriş merkezini keşfet. Yerel deneyim için ideal.',
   },
+  Yolculuk: {
+    tips: [
+      '⛽ Yola çıkmadan önce yakıt/su kontrol et',
+      '🗺️ Mola noktalarını önceden belirle',
+      '🎵 Yol listeni hazırla, dinlendirici müzik seç',
+    ],
+    nearby: ['Akaryakıt İstasyonu', 'Mola Tesisi', 'Otopark'],
+    description: 'Şehirler arası yolculuk — coğrafyayı değiştirirken yeni manzaralar seni bekliyor.',
+  },
   default: {
     tips: [
       '🗺️ Rotayı önceden incele',
@@ -93,8 +102,9 @@ const TAG_COLORS = {
   Kültür:   { bg: '#EDE7F6', text: '#4527A0', border: '#CE93D8' },
   Aktivite: { bg: '#FCE4EC', text: '#AD1457', border: '#F48FB1' },
   Premium:  { bg: '#FFF8E1', text: '#FF6F00', border: '#FFCC02' },
-  Serbest:  { bg: '#FFF3E0', text: '#E65100', border: '#FFCC80' },
-  default:  { bg: Colors.background, text: Colors.textSecondary, border: Colors.border },
+  Serbest:   { bg: '#FFF3E0', text: '#E65100', border: '#FFCC80' },
+  Yolculuk:  { bg: '#E3F2FD', text: '#0D47A1', border: '#90CAF9' },
+  default:   { bg: Colors.background, text: Colors.textSecondary, border: Colors.border },
 };
 
 const REPLACE_REASONS = [

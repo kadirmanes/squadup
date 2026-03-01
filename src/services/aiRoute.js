@@ -51,51 +51,68 @@ function buildPrompt(prefs) {
   const {
     startLocation, destination, startDate, endDate, days,
     accommodationType, budget, interests, includeMeals,
-    selectedCities, visitedPlaces,
+    selectedCities, visitedPlaces, previousCity,
   } = prefs;
 
   const accomLabel  = ACCOM_LABELS[accommodationType] || accommodationType;
   const budgetLabel = BUDGET_LABELS[budget] || budget;
   const interestStr = (interests || []).length > 0 ? interests.join(', ') : 'genel keşif';
+  const isCaravan   = accommodationType === 'caravan';
+  const vehicleDesc = isCaravan ? 'karavan (ort. 70 km/h)' : 'araç (ort. 90 km/h)';
 
   const routeInstruction = selectedCities?.length
     ? `${selectedCities.join(' → ')} güzergahında ${days} günlük bir ${accomLabel} seyahati planla.`
     : `${startLocation}'dan ${destination}'a ${days} günlük bir ${accomLabel} seyahati planla.`;
 
   const visitedNote = visitedPlaces?.length
-    ? `\nKullanıcının daha önce gördüğü ve TEKRAR ÖNERİLMEMESİ gereken yerler: ${visitedPlaces.join(', ')}`
+    ? `\nDaha önce görülen (tekrar önerme): ${visitedPlaces.join(', ')}`
+    : '';
+
+  // For batch continuation: previous city to compute travel for day 1 of this batch
+  const prevCityNote = previousCity
+    ? `\nBu planın ilk günü ${previousCity}'dan geliyor, yolculuk aktivitesi ekle.`
     : '';
 
   const mealRules = includeMeals
-    ? `YEMEK MOLALARI — ZORUNLU:
-- Kahvaltı (08:30): Konaklamada kahvaltı dahil değilse gerçek bir kafe veya restoran adı öner. Tag: "Yemek".
-- Öğle yemeği (12:30): Gerçek restoran adı öner. Description'a adres ve yöresel yemek önerisi ekle. Tag: "Yemek".
-- Akşam yemeği (19:30): Gerçek restoran adı öner. Description'a adres ve yöresel yemek önerisi ekle. Tag: "Yemek".
-- Tüm yemek aktivitelerinde cost alanına kişi başı tahmini fiyat yaz (örn. "₺150-200 kişi başı").
-- address alanına mekanın kısa adresini/semtini yaz.`
-    : `YEMEK MOLALARI:
-- Her gün öğle (12:30) ve akşam (19:30) için tag: "Yemek" aktivite ekle. Genel öneri yeterli, gerçek restoran zorunlu değil.`;
+    ? `YEMEK:
+- Sabah kahvaltısı (kalkıştan önce veya yolda mola olarak): tag "Yemek", kısa not yeter.
+- Öğle (varışa göre uygun saatte): gerçek restoran adı, yöresel öneri, cost kişi başı. Tag "Yemek".
+- Akşam (19:30 civarı): gerçek restoran adı, cost kişi başı. Tag "Yemek".`
+    : `YEMEK:
+- Öğle ve akşam için tag "Yemek" ekle, genel öneri yeterli.`;
 
-  return `Sen Türkiye ve Avrupa'yı iyi bilen bir seyahat rehberisin.
+  return `Sen Türkiye ve Avrupa seyahatlerini çok iyi bilen bir rehbersin.
 
 ${routeInstruction}
 Tarihler: ${startDate} → ${endDate}
+Araç: ${vehicleDesc}
 Bütçe: ${budgetLabel}
-İlgi alanları: ${interestStr}${visitedNote}
+İlgi: ${interestStr}${visitedNote}${prevCityNote}
 
-KURALLAR:
-1. Her gün FARKLI bir şehirde geç, coğrafi sıra izle.
-2. Her aktivite başlığında GERÇEK mekan adı kullan.
-3. Her aktivitenin "description" alanı: 1 kısa cümle (max 12 kelime).
-4. Her gün 16:00'da "Serbest Zaman & Alışveriş" ekle: gerçek çarşı/pazar/AVM adı, tag: "Serbest".
-5. Her gün 3 konaklama seçeneği: kamp, otel, kiralık. Sadece name+address(kısa)+cost+note.
-6. Tag şunlardan biri: Kültür, Doğa, Yemek, Akşam, Aktivite, Sabah, Huzur, Keşif, Macera, Gastronomi, Premium, Serbest.
-7. Günde tam 6 aktivite.
+YOLCULUK KURALLARI (ÇOK ÖNEMLİ):
+- 1. gün: yolculuk aktivitesi YOK, doğrudan gezi yap (başlangıç şehri).
+- 2. gün ve sonrası: İlk aktivite mutlaka 07:30'da şehirlerarası yolculuk olsun.
+  - title: "[Önceki Şehir]'den [Mevcut Şehir]'e Yolculuk"
+  - tag: "Yolculuk"
+  - cost: "Yakıt ~₺xxx" (tahmini mesafeye göre)
+  - description: "~X saatlik yolculuk. [Önemli mola noktası] önerilir."
+  - Varış saatini hesapla: 07:30 + yolculuk süresi.
+  - Sonraki tüm aktiviteler varış saatinden itibaren başlasın.
+- Kısa yollar (1-2 saat): aktiviteler 09:30-10:00'da başlayabilir.
+- Uzun yollar (4-6 saat): aktiviteler 13:00-14:00'da başlasın.
+
+DİĞER KURALLAR:
+1. Her aktivite başlığında GERÇEK mekan adı kullan.
+2. description: 1 kısa cümle (max 12 kelime).
+3. Her gün 16:00'da "Serbest Zaman & Alışveriş": gerçek çarşı/pazar/AVM adı, tag "Serbest".
+4. Her gün 3 konaklama seçeneği: kamp, otel, kiralık.
+5. Günde aktivite sayısı: yola çıkılan günlerde 5, gezi günlerinde 6.
+6. Tag: Kültür, Doğa, Yemek, Akşam, Aktivite, Sabah, Huzur, Keşif, Macera, Gastronomi, Premium, Serbest, Yolculuk.
 ${mealRules}
 
 SADECE JSON yanıt ver:
 
-{"route":[{"day":1,"location":"Şehir","lat":39.9,"lng":32.8,"activities":[{"time":"09:00","title":"Mekan Adı","tag":"Kültür","cost":"Ücretsiz","description":"1 cümle bilgi.","address":"Semt (yemek için)"}],"accommodationOptions":[{"type":"kamp","name":"Kamp adı","address":"Semt","cost":"₺xx/gece","note":"Not"},{"type":"otel","name":"Otel adı","address":"Semt","cost":"₺xx/gece","note":"Not"},{"type":"kiralık","name":"Daire/mahalle","address":"Semt","cost":"₺xx/gece","note":"Not"}]}]}`;
+{"route":[{"day":1,"location":"Şehir","lat":39.9,"lng":32.8,"activities":[{"time":"09:00","title":"Mekan Adı","tag":"Kültür","cost":"Ücretsiz","description":"1 cümle.","address":"Semt"}],"accommodationOptions":[{"type":"kamp","name":"Kamp adı","address":"Semt","cost":"₺xx/gece","note":"Not"},{"type":"otel","name":"Otel adı","address":"Semt","cost":"₺xx/gece","note":"Not"},{"type":"kiralık","name":"Daire","address":"Semt","cost":"₺xx/gece","note":"Not"}]}]}`;
 }
 
 // ─── JSON extractor ───────────────────────────────────────────────────────
@@ -254,6 +271,8 @@ async function _generateBatched(prefs, apiKey, onProgress) {
       ...prefs,
       selectedCities: batches[i],
       days: batches[i].length,
+      // Tell AI the last city of the previous batch so it can plan travel on day 1
+      previousCity: i > 0 ? batches[i - 1].at(-1) : null,
     };
     const route = await _callAPI(batchPrefs, apiKey);
     route.forEach((d) => { d.day = d.day + dayOffset; });
