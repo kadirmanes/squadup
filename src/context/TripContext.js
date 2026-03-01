@@ -54,6 +54,13 @@ export function TripProvider({ children }) {
     setExpenses([]);
   }, []);
 
+  // Called by GeneratingScreen after AI returns a result
+  const setTripFromAI = useCallback((prefs, aiResult) => {
+    setPreferences(prefs);
+    setTripData(aiResult);
+    setExpenses([]);
+  }, []);
+
   const resetTrip = useCallback(async () => {
     setPreferences(null);
     setTripData(null);
@@ -89,6 +96,7 @@ export function TripProvider({ children }) {
         totalSpent,
         hydrated,
         startTrip,
+        setTripFromAI,
         resetTrip,
         addExpense,
         removeExpense,

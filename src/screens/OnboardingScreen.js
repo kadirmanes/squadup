@@ -397,7 +397,7 @@ export default function OnboardingScreen({ navigation }) {
     if (!isLast) {
       animate(1, () => setStepIndex((i) => i + 1));
     } else {
-      startTrip({
+      const prefs = {
         startLocation:     startLocation.trim(),
         destination:       destination.trim(),
         startDate:         startDate ? startDate.toISOString().split('T')[0] : null,
@@ -406,8 +406,9 @@ export default function OnboardingScreen({ navigation }) {
         accommodationType: accommodation,
         budget,
         interests,
-      });
-      navigation.navigate(Routes.MAIN);
+      };
+      // Navigate to GeneratingScreen — it handles AI call and then goes to MAIN
+      navigation.navigate(Routes.GENERATING, { preferences: prefs });
     }
   }, [canProceed, isLast, startLocation, destination, startDate, endDate, computedDays, accommodation, budget, interests]);
 

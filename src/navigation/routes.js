@@ -4,8 +4,9 @@
  */
 
 export const Routes = {
-  ONBOARDING: 'Onboarding',
-  MAIN: 'Main',
+  ONBOARDING:      'Onboarding',
+  GENERATING:      'Generating',
+  MAIN:            'Main',
   ACTIVITY_DETAIL: 'ActivityDetail',
-  PACKING_LIST: 'PackingList',
+  PACKING_LIST:    'PackingList',
 };

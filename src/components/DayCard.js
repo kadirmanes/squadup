@@ -67,10 +67,49 @@ function ActivityRow({ activity, isLast, onPress }) {
   );
 }
 
+const ACCOM_ICONS = { caravan: '🚐', camping: '⛺', hotel: '🏨', default: '🌙' };
+
+function AccommodationCard({ accommodation }) {
+  if (!accommodation) return null;
+  const icon = ACCOM_ICONS[accommodation.type] || ACCOM_ICONS.default;
+  return (
+    <View style={accomStyles.card}>
+      <View style={accomStyles.header}>
+        <Text style={accomStyles.moonIcon}>🌙</Text>
+        <Text style={accomStyles.headerText}>Bu Gece Konaklama</Text>
+      </View>
+      <View style={accomStyles.body}>
+        <View style={accomStyles.nameRow}>
+          <Text style={accomStyles.icon}>{icon}</Text>
+          <Text style={accomStyles.name}>{accommodation.name}</Text>
+        </View>
+        {accommodation.address ? (
+          <Text style={accomStyles.address}>📍 {accommodation.address}</Text>
+        ) : null}
+        <View style={accomStyles.pillRow}>
+          {accommodation.cost ? (
+            <View style={accomStyles.pill}>
+              <Text style={accomStyles.pillText}>💰 {accommodation.cost}</Text>
+            </View>
+          ) : null}
+          {accommodation.facilities ? (
+            <View style={accomStyles.pill}>
+              <Text style={accomStyles.pillText} numberOfLines={1}>⚙️ {accommodation.facilities}</Text>
+            </View>
+          ) : null}
+        </View>
+        {accommodation.note ? (
+          <Text style={accomStyles.note}>ℹ️ {accommodation.note}</Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 export default function DayCard({ dayPlan, isExpanded: initialExpanded = false, onActivityPress }) {
   const [expanded, setExpanded] = useState(initialExpanded);
 
-  const { day, title, subtitle, activities = [], estimatedCost } = dayPlan;
+  const { day, title, subtitle, activities = [], estimatedCost, accommodation } = dayPlan;
 
   return (
     <View style={[styles.card, Shadow.sm]}>
@@ -107,6 +146,7 @@ export default function DayCard({ dayPlan, isExpanded: initialExpanded = false, 
               onPress={onActivityPress}
             />
           ))}
+          <AccommodationCard accommodation={accommodation} />
         </View>
       )}
     </View>
@@ -250,4 +290,50 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontWeight: Typography.weight.medium,
   },
+});
+
+const accomStyles = StyleSheet.create({
+  card: {
+    marginHorizontal: Spacing.md,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md,
+    borderRadius: Radius.xl,
+    backgroundColor: Colors.primaryDark,
+    overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm + 2,
+    paddingBottom: Spacing.xs,
+  },
+  moonIcon: { fontSize: 16 },
+  headerText: {
+    fontSize: Typography.size.xs,
+    fontWeight: Typography.weight.bold,
+    color: Colors.primaryLight,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  body: {
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.md,
+    gap: Spacing.xs + 2,
+  },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  icon:    { fontSize: 20 },
+  name:    { fontSize: Typography.size.base, fontWeight: Typography.weight.bold, color: '#FFFFFF', flex: 1 },
+  address: { fontSize: Typography.size.xs, color: Colors.primaryLight, opacity: 0.85 },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs },
+  pill: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: Radius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    maxWidth: '100%',
+  },
+  pillText: { fontSize: 10, color: Colors.primaryLight, fontWeight: Typography.weight.medium },
+  note: { fontSize: Typography.size.xs, color: Colors.primaryLight, opacity: 0.75, fontStyle: 'italic' },
 });

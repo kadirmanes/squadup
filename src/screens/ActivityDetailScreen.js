@@ -92,7 +92,12 @@ export default function ActivityDetailScreen({ navigation, route }) {
   }
 
   const tagColor = TAG_COLORS[activity.tag] || TAG_COLORS.default;
-  const details = TAG_DETAILS[activity.tag] || TAG_DETAILS.default;
+  const fallback = TAG_DETAILS[activity.tag] || TAG_DETAILS.default;
+  // Prefer AI-generated description over generic fallback
+  const details = {
+    ...fallback,
+    description: activity.description || fallback.description,
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>

@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import OnboardingScreen from '../screens/OnboardingScreen';
+import GeneratingScreen from '../screens/GeneratingScreen';
 import ActivityDetailScreen from '../screens/ActivityDetailScreen';
 import PackingListScreen from '../screens/PackingListScreen';
 import MainTabs from './MainTabs';
@@ -24,6 +25,11 @@ export default function AppNavigator() {
           name={Routes.ONBOARDING}
           component={OnboardingScreen}
           options={{ animation: 'fade' }}
+        />
+        <Stack.Screen
+          name={Routes.GENERATING}
+          component={GeneratingScreen}
+          options={{ animation: 'fade', gestureEnabled: false }}
         />
         <Stack.Screen
           name={Routes.MAIN}
