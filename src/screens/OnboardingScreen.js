@@ -166,6 +166,50 @@ const vStyles = StyleSheet.create({
   divider:    { height: 1, backgroundColor: Colors.borderLight, marginVertical: 2 },
 });
 
+// ─── Step: Hazır Rotalar ───────────────────────────────────────────────────
+
+function StepPresets({ onSelect }) {
+  return (
+    <View style={psStyles.container}>
+      <View style={psStyles.grid}>
+        {PRESET_ROUTES.map((route) => (
+          <TouchableOpacity
+            key={route.id}
+            style={[psStyles.card, { backgroundColor: route.bg, borderColor: route.border }]}
+            onPress={() => onSelect(route)}
+            activeOpacity={0.8}
+          >
+            <Text style={psStyles.cardEmoji}>{route.emoji}</Text>
+            <Text style={[psStyles.cardTitle, { color: route.color }]}>{route.title}</Text>
+            <Text style={psStyles.cardSub}>{route.subtitle}</Text>
+            <Text style={psStyles.cardCities} numberOfLines={1}>{route.cities.join(' › ')}</Text>
+            <View style={[psStyles.daysTag, { backgroundColor: route.color }]}>
+              <Text style={psStyles.daysTagText}>~{route.recommendedDays} gün</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <TouchableOpacity style={psStyles.customBtn} onPress={() => onSelect(null)} activeOpacity={0.8}>
+        <Text style={psStyles.customBtnText}>✏️  Kendi Rotamı Planlayayım</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const psStyles = StyleSheet.create({
+  container:    { gap: Spacing.md },
+  grid:         { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  card:         { width: '48%', borderRadius: Radius.xl, borderWidth: 1.5, padding: Spacing.md, gap: 3 },
+  cardEmoji:    { fontSize: 26 },
+  cardTitle:    { fontSize: Typography.size.base, fontWeight: Typography.weight.bold },
+  cardSub:      { fontSize: Typography.size.xs, color: Colors.textTertiary },
+  cardCities:   { fontSize: 9, color: Colors.textTertiary, marginTop: 2 },
+  daysTag:      { alignSelf: 'flex-start', borderRadius: Radius.full, paddingHorizontal: 8, paddingVertical: 2, marginTop: 4 },
+  daysTagText:  { fontSize: Typography.size.xs, color: '#FFFFFF', fontWeight: Typography.weight.bold },
+  customBtn:    { borderRadius: Radius.xl, borderWidth: 1.5, borderColor: Colors.border, paddingVertical: Spacing.md, alignItems: 'center', backgroundColor: Colors.surface },
+  customBtnText:{ fontSize: Typography.size.base, fontWeight: Typography.weight.semibold, color: Colors.textSecondary },
+});
+
 // ─── Accommodation options ─────────────────────────────────────────────────
 
 const ACCOMMODATION_OPTIONS = [
@@ -192,17 +236,83 @@ const INTEREST_OPTIONS = [
 const POPULAR_STARTS = ['İstanbul', 'Ankara', 'İzmir', 'Bursa', 'Antalya', 'Adana'];
 const POPULAR_ENDS   = ['Kapadokya', 'Bodrum', 'Rize', 'Trabzon', 'Pamukkale', 'Mardin'];
 
+// ─── Preset routes ─────────────────────────────────────────────────────────
+
+export const PRESET_ROUTES = [
+  {
+    id: 'karadeniz',
+    title: 'Karadeniz',
+    emoji: '🌊',
+    subtitle: 'Doğu Karadeniz Kıyısı',
+    cities: ['Samsun', 'Ordu', 'Giresun', 'Trabzon', 'Rize', 'Artvin'],
+    highlights: 'Sümela, Uzungöl, Ayder Yaylası',
+    recommendedDays: 6,
+    bg: '#E3F2FD', color: '#1565C0', border: '#90CAF9',
+  },
+  {
+    id: 'ege',
+    title: 'Ege Kıyısı',
+    emoji: '⛵',
+    subtitle: 'Antik & Mavi',
+    cities: ['İzmir', 'Çeşme', 'Selçuk', 'Kuşadası', 'Didim', 'Bodrum'],
+    highlights: 'Efes, Alaçatı, Bodrum',
+    recommendedDays: 6,
+    bg: '#E8F5E9', color: '#2E7D32', border: '#A5D6A7',
+  },
+  {
+    id: 'dogu_anadolu',
+    title: 'Doğu Anadolu',
+    emoji: '🏔️',
+    subtitle: 'Dağlar & Kültür',
+    cities: ['Erzurum', 'Kars', 'Iğdır', 'Ağrı', 'Van'],
+    highlights: 'Kars Kalesi, Ağrı Dağı, Van Gölü',
+    recommendedDays: 5,
+    bg: '#FBE9E7', color: '#BF360C', border: '#FFAB91',
+  },
+  {
+    id: 'akdeniz',
+    title: 'Akdeniz',
+    emoji: '🌴',
+    subtitle: 'Güneş & Tarih',
+    cities: ['Antalya', 'Alanya', 'Silifke', 'Mersin'],
+    highlights: 'Aspendos, Alanya Kalesi, Kızkalesi',
+    recommendedDays: 4,
+    bg: '#FFF8E1', color: '#F57F17', border: '#FFE082',
+  },
+  {
+    id: 'kapadokya',
+    title: 'Kapadokya',
+    emoji: '🎈',
+    subtitle: 'Orta Anadolu',
+    cities: ['Ankara', 'Kırşehir', 'Nevşehir', 'Aksaray'],
+    highlights: 'Peribacaları, Derinkuyu, Balon Turu',
+    recommendedDays: 4,
+    bg: '#F3E5F5', color: '#6A1B9A', border: '#CE93D8',
+  },
+  {
+    id: 'guneybati',
+    title: 'Güneybatı',
+    emoji: '🦋',
+    subtitle: 'Mavi Yolculuk',
+    cities: ['Muğla', 'Marmaris', 'Fethiye', 'Kaş', 'Antalya'],
+    highlights: 'Ölüdeniz, Kelebek Vadisi, Kaş',
+    recommendedDays: 5,
+    bg: '#E0F2F1', color: '#00695C', border: '#80CBC4',
+  },
+];
+
 const TR_MONTHS     = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const TR_DAYS_SHORT = ['Pt','Sa','Ça','Pe','Cu','Ct','Pz'];
 
 const STEPS = [
-  { key: 'startLocation', title: 'Nereden?',      subtitle: 'Yolculuğun başlangıç noktası',      emoji: '🚩' },
-  { key: 'destination',   title: 'Nereye?',        subtitle: 'Hedef şehir veya bölge',            emoji: '🏁' },
-  { key: 'dates',         title: 'Ne Zaman?',      subtitle: 'Başlangıç ve bitiş tarihi',         emoji: '📅' },
-  { key: 'accom',         title: 'Konaklama',      subtitle: 'Seyahat stilini seç',               emoji: '🏕️' },
-  { key: 'vehicle',       title: 'Araç Profili',   subtitle: 'Araç tipini ve detaylarını belirle', emoji: '🚐' },
-  { key: 'budget',        title: 'Bütçe',          subtitle: 'Harcama tercihini belirle',         emoji: '💰' },
-  { key: 'interests',     title: 'İlgi Alanları',  subtitle: 'Birden fazla seçebilirsin',         emoji: '✨' },
+  { key: 'presets',       title: 'Rota Seç',       subtitle: 'Hazır rota veya kendin planla',      emoji: '🗺️' },
+  { key: 'startLocation', title: 'Nereden?',        subtitle: 'Yolculuğun başlangıç noktası',      emoji: '🚩' },
+  { key: 'destination',   title: 'Nereye?',         subtitle: 'Hedef şehir veya bölge',            emoji: '🏁' },
+  { key: 'dates',         title: 'Ne Zaman?',       subtitle: 'Başlangıç ve bitiş tarihi',         emoji: '📅' },
+  { key: 'accom',         title: 'Konaklama',       subtitle: 'Seyahat stilini seç',               emoji: '🏕️' },
+  { key: 'vehicle',       title: 'Araç Profili',    subtitle: 'Araç tipini ve detaylarını belirle', emoji: '🚐' },
+  { key: 'budget',        title: 'Bütçe',           subtitle: 'Harcama tercihini belirle',         emoji: '💰' },
+  { key: 'interests',     title: 'İlgi Alanları',   subtitle: 'Birden fazla seçebilirsin',         emoji: '✨' },
 ];
 
 // ─── Calendar Helpers ──────────────────────────────────────────────────────
@@ -520,6 +630,7 @@ export default function OnboardingScreen({ navigation }) {
   const [budget,         setBudget]         = useState('standart');
   const [interests,      setInterests]      = useState([]);
   const [includeMeals,   setIncludeMeals]   = useState(true);
+  const [presetRoute,    setPresetRoute]    = useState(null);
 
   const slideX  = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
@@ -546,10 +657,11 @@ export default function OnboardingScreen({ navigation }) {
 
   const canProceed = useMemo(() => {
     switch (STEPS[stepIndex].key) {
+      case 'presets':       return false; // navigation via card taps
       case 'startLocation': return startLocation.trim().length > 0;
       case 'destination':   return destination.trim().length > 0;
       case 'dates':         return startDate !== null && endDate !== null;
-      default:              return true; // vehicle step is optional
+      default:              return true;
     }
   }, [stepIndex, startLocation, destination, startDate, endDate]);
 
@@ -587,6 +699,19 @@ export default function OnboardingScreen({ navigation }) {
   const goBack = useCallback(() => {
     if (stepIndex > 0) animate(-1, () => setStepIndex((i) => i - 1));
   }, [stepIndex]);
+
+  const handlePresetSelect = useCallback((preset) => {
+    if (preset) {
+      setStartLocation(preset.cities[0]);
+      setDestination(preset.cities[preset.cities.length - 1]);
+      setPresetRoute(preset);
+      const datesIdx = STEPS.findIndex((s) => s.key === 'dates');
+      animate(1, () => setStepIndex(datesIdx));
+    } else {
+      setPresetRoute(null);
+      animate(1, () => setStepIndex(1));
+    }
+  }, [animate]);
 
   const step = STEPS[stepIndex];
 
