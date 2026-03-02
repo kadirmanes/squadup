@@ -248,6 +248,10 @@ export const PRESET_ROUTES = [
     highlights: 'Sümela, Uzungöl, Ayder Yaylası',
     recommendedDays: 6,
     bg: '#E3F2FD', color: '#1565C0', border: '#90CAF9',
+    bestMonths: [4, 5, 6, 7, 8],       // Mayıs–Eylül
+    seasonLabel: 'Mayıs – Eylül',
+    seasonEmoji: '🌿',
+    seasonNote: 'Yaylalar ve çay bahçeleri en güzel bu dönemde',
   },
   {
     id: 'ege',
@@ -258,6 +262,10 @@ export const PRESET_ROUTES = [
     highlights: 'Efes, Alaçatı, Bodrum',
     recommendedDays: 6,
     bg: '#E8F5E9', color: '#2E7D32', border: '#A5D6A7',
+    bestMonths: [3, 4, 5, 6, 7, 8, 9], // Nisan–Ekim
+    seasonLabel: 'Nisan – Ekim',
+    seasonEmoji: '☀️',
+    seasonNote: 'Antik kentler ve koy koyu keşif için ideal dönem',
   },
   {
     id: 'dogu_anadolu',
@@ -268,6 +276,10 @@ export const PRESET_ROUTES = [
     highlights: 'Kars Kalesi, Ağrı Dağı, Van Gölü',
     recommendedDays: 5,
     bg: '#FBE9E7', color: '#BF360C', border: '#FFAB91',
+    bestMonths: [5, 6, 7, 8],          // Haziran–Eylül
+    seasonLabel: 'Haziran – Eylül',
+    seasonEmoji: '🏔️',
+    seasonNote: 'Kış aylarında yollar kapanabilir, yazı tercih et',
   },
   {
     id: 'akdeniz',
@@ -278,6 +290,10 @@ export const PRESET_ROUTES = [
     highlights: 'Aspendos, Alanya Kalesi, Kızkalesi',
     recommendedDays: 4,
     bg: '#FFF8E1', color: '#F57F17', border: '#FFE082',
+    bestMonths: [2, 3, 4, 5, 8, 9, 10],// Mart–Haziran & Eylül–Kasım
+    seasonLabel: 'Mar–Haz & Eyl–Kas',
+    seasonEmoji: '🌸',
+    seasonNote: 'Temmuz–Ağustos çok sıcak; ilkbahar ve sonbahar mükemmel',
   },
   {
     id: 'kapadokya',
@@ -288,6 +304,10 @@ export const PRESET_ROUTES = [
     highlights: 'Peribacaları, Derinkuyu, Balon Turu',
     recommendedDays: 4,
     bg: '#F3E5F5', color: '#6A1B9A', border: '#CE93D8',
+    bestMonths: [3, 4, 5, 8, 9, 10],   // Nisan–Haziran & Eylül–Kasım
+    seasonLabel: 'Nis–Haz & Eyl–Kas',
+    seasonEmoji: '🎈',
+    seasonNote: 'Balon turları için sabah sisi ve ılık hava ideal',
   },
   {
     id: 'guneybati',
@@ -298,6 +318,10 @@ export const PRESET_ROUTES = [
     highlights: 'Ölüdeniz, Kelebek Vadisi, Kaş',
     recommendedDays: 5,
     bg: '#E0F2F1', color: '#00695C', border: '#80CBC4',
+    bestMonths: [3, 4, 5, 6, 8, 9],    // Nisan–Temmuz & Eylül–Ekim
+    seasonLabel: 'Nisan – Ekim',
+    seasonEmoji: '🌊',
+    seasonNote: 'Kelebek Vadisi\'ni görmek için Nisan–Haziran en iyi dönem',
   },
 ];
 
@@ -375,7 +399,7 @@ function LocationStep({ value, onChange, suggestions, placeholder }) {
   );
 }
 
-function StepDates({ startDate, endDate, onDatesChange }) {
+function StepDates({ startDate, endDate, onDatesChange, presetRoute }) {
   const today = toDateOnly(new Date());
   const [viewYear, setViewYear]   = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
@@ -420,14 +444,35 @@ function StepDates({ startDate, endDate, onDatesChange }) {
     return (dayNum < 1 || dayNum > daysInMonth) ? null : dayNum;
   });
 
+  const isBestMonth = presetRoute?.bestMonths?.includes(viewMonth);
+
   return (
     <View style={sStyles.calendarWrap}>
+      {/* Season tip banner — only when a preset is selected */}
+      {presetRoute?.seasonLabel && (
+        <View style={[sStyles.seasonBanner, isBestMonth && sStyles.seasonBannerActive]}>
+          <Text style={sStyles.seasonBannerEmoji}>{presetRoute.seasonEmoji}</Text>
+          <View style={sStyles.seasonBannerText}>
+            <Text style={sStyles.seasonBannerTitle}>
+              {isBestMonth ? '✓ İdeal dönem' : 'Önerilen dönem'}{' '}
+              <Text style={sStyles.seasonBannerRange}>{presetRoute.seasonLabel}</Text>
+            </Text>
+            <Text style={sStyles.seasonBannerNote}>{presetRoute.seasonNote}</Text>
+          </View>
+        </View>
+      )}
+
       {/* Month navigation */}
       <View style={sStyles.calMonthRow}>
         <TouchableOpacity style={sStyles.calNavBtn} onPress={prevMonth} activeOpacity={0.7}>
           <Text style={sStyles.calNavText}>‹</Text>
         </TouchableOpacity>
-        <Text style={sStyles.calMonthLabel}>{TR_MONTHS[viewMonth]} {viewYear}</Text>
+        <View style={sStyles.calMonthLabelWrap}>
+          <Text style={[sStyles.calMonthLabel, isBestMonth && { color: Colors.primary }]}>
+            {TR_MONTHS[viewMonth]} {viewYear}
+          </Text>
+          {isBestMonth && <View style={sStyles.bestMonthDot} />}
+        </View>
         <TouchableOpacity style={sStyles.calNavBtn} onPress={nextMonth} activeOpacity={0.7}>
           <Text style={sStyles.calNavText}>›</Text>
         </TouchableOpacity>
@@ -722,7 +767,7 @@ export default function OnboardingScreen({ navigation }) {
       case 'destination':
         return <LocationStep value={destination} onChange={setDestination} suggestions={POPULAR_ENDS} placeholder="Kapadokya, Bodrum, Rize..." />;
       case 'dates':
-        return <StepDates startDate={startDate} endDate={endDate} onDatesChange={(s, e) => { setStartDate(s); setEndDate(e); }} />;
+        return <StepDates startDate={startDate} endDate={endDate} onDatesChange={(s, e) => { setStartDate(s); setEndDate(e); }} presetRoute={presetRoute} />;
       case 'accom':
         return <StepAccommodation value={accommodation} onChange={setAccommodation} includeMeals={includeMeals} onToggleMeals={setIncludeMeals} />;
       case 'vehicle':
@@ -856,10 +901,27 @@ const sStyles = StyleSheet.create({
 
   // Calendar
   calendarWrap:   { gap: Spacing.sm },
+
+  // Season banner
+  seasonBanner: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm,
+    backgroundColor: Colors.surface, borderRadius: Radius.xl,
+    borderWidth: 1.5, borderColor: Colors.border,
+    padding: Spacing.md,
+  },
+  seasonBannerActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryFaded },
+  seasonBannerEmoji:  { fontSize: 22, marginTop: 1 },
+  seasonBannerText:   { flex: 1, gap: 2 },
+  seasonBannerTitle:  { fontSize: Typography.size.sm, fontWeight: Typography.weight.bold, color: Colors.textPrimary },
+  seasonBannerRange:  { color: Colors.primary },
+  seasonBannerNote:   { fontSize: Typography.size.xs, color: Colors.textTertiary },
+
   calMonthRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   calNavBtn:      { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.md, backgroundColor: Colors.surface },
   calNavText:     { fontSize: 22, color: Colors.primary, fontWeight: Typography.weight.bold, lineHeight: 26 },
+  calMonthLabelWrap: { alignItems: 'center', gap: 2 },
   calMonthLabel:  { fontSize: Typography.size.md, fontWeight: Typography.weight.bold, color: Colors.textPrimary },
+  bestMonthDot:   { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.primary },
   calDayHeaders:  { flexDirection: 'row' },
   calGrid:        { flexDirection: 'row', flexWrap: 'wrap' },
   calCell:        { width: CELL_SIZE, height: CELL_SIZE, alignItems: 'center', justifyContent: 'center' },
