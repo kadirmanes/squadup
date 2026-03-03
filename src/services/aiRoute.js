@@ -156,7 +156,7 @@ function buildPrompt(prefs) {
   const {
     startLocation, destination, startDate, endDate, days,
     accommodationType, budget, interests, includeMeals,
-    selectedCities, visitedPlaces, previousCity,
+    selectedCities, dayPlan, visitedPlaces, previousCity,
     vehicleProfile, weatherMap,
   } = prefs;
 
@@ -182,17 +182,45 @@ function buildPrompt(prefs) {
   // Weather context
   const weatherContext = weatherMap ? buildWeatherPromptContext(weatherMap) : '';
 
-  const routeInstruction = selectedCities?.length
-    ? `${selectedCities.join(' → ')} güzergahında ${days} günlük bir ${accomLabel} seyahati planla.`
-    : `${startLocation}'dan ${destination}'a ${days} günlük bir ${accomLabel} seyahati planla.`;
+  const day1Origin = previousCity || startLocation;
+
+  // ── Route instruction: use dayPlan if available, otherwise simple cities list ──
+  let routeInstruction;
+  let routeRules;
+
+  if (dayPlan?.length) {
+    // Smart multi-city day plan
+    const planLines = dayPlan.map((d) => {
+      const stopStr = d.stops.map((s) =>
+        s.isStopover ? `${s.city} (~${s.hours}h geçiş durağı, konaklama YOK)` : `${s.city} (konaklama)`
+      ).join(' → ');
+      return `  Gün ${d.day}: ${stopStr}`;
+    }).join('\n');
+
+    routeInstruction = `${days} günlük ${accomLabel} yolculuğunu şu plana göre oluştur:\n${planLines}`;
+
+    routeRules = `GÜZERGAH KURALLARI:
+- Yukardaki günlük plan KESİNLİKLE uy.
+- Geçiş duraklarında (isStopover) sadece geçiş süresi kadar aktivite yap; konaklama seçeneği ekleme.
+- Konaklama sadece o günün geceleme şehrine ekle (accommodationOptions).
+- Bir günde birden fazla şehir varsa şehirler arası yolculuğu aktivite olarak ekle (tag: "Yolculuk").
+- HER günün ilk aktivitesi ${day1Origin}'dan (veya önceki gün gece kalınan şehirden) yolculuk olsun (07:30-08:00).`;
+  } else {
+    // Fallback: simple list
+    routeInstruction = selectedCities?.length
+      ? `${selectedCities.join(' → ')} güzergahında ${days} günlük bir ${accomLabel} seyahati planla.`
+      : `${startLocation}'dan ${destination}'a ${days} günlük bir ${accomLabel} seyahati planla.`;
+
+    routeRules = `GÜZERGAH KURALLARI:
+- Her şehirde 1 gün kal. Şehirleri sırayla geç.
+- HER günün ilk aktivitesi yolculuk olsun (07:30-08:00, tag: "Yolculuk").`;
+  }
 
   const visitedNote = visitedPlaces?.length
     ? `\nDaha önce görülen (tekrar önerme): ${visitedPlaces.join(', ')}`
     : '';
 
-  // Day 1 always departs from previousCity (batch continuation) or startLocation (first batch)
-  const day1Origin = previousCity || startLocation;
-  const prevCityNote = `\nBu planın 1. günü ${day1Origin}'dan yola çıkıyor; 1. gün de dahil olmak üzere HER günün ilk aktivitesi yolculuk olsun.`;
+  const prevCityNote = `\nBu planın 1. günü ${day1Origin}'dan yola çıkıyor.`;
 
   // Accommodation: 3 options of the same type as selected
   const accomOptionsRule =
@@ -220,28 +248,21 @@ Araç: ${vehicleDesc}
 Bütçe: ${budgetLabel}
 İlgi: ${interestStr}${visitedNote}${prevCityNote}${weatherContext}${algorithmContext}
 
-YOLCULUK KURALLARI (ÇOK ÖNEMLİ):
-- HER günün (1. gün dahil) ilk aktivitesi yolculuk olsun.
-  - 1. gün: "${day1Origin}'dan [İlk Şehir]'e Yolculuk" (07:30-08:00 arası başla)
-  - 2. gün ve sonrası: "[Önceki Şehir]'den [Mevcut Şehir]'e Yolculuk" (07:30'da başla)
-  - tag: "Yolculuk", cost: "Yakıt ~₺xxx", description: "~X saatlik yolculuk. [Mola noktası] önerilir."
-  - Varış saatini hesapla, sonraki aktiviteler varıştan itibaren başlasın.
-- Kısa yollar (1-2 saat): sonraki aktiviteler 09:30-10:00'da.
-- Uzun yollar (4-6 saat): sonraki aktiviteler 13:00-14:00'da.
+${routeRules}
 
 DİĞER KURALLAR:
-0. GÜZERGAH: ${selectedCities?.join(' → ') || `${startLocation} → ${destination}`}. Her şehir için TAM OLARAK 1 gün. Aynı şehirde 2 gün geçirilmez. Şehirleri atlamadan sırayla geç.
 1. Her aktivite başlığında GERÇEK mekan adı kullan.
 2. description: 1 kısa cümle (max 12 kelime).
-3. Her gün 16:00'da "Serbest Zaman & Alışveriş": gerçek çarşı/pazar/AVM adı, tag "Serbest".
-4. Her gün ${accomOptionsRule}; her seçeneğe kısa "reviewSummary" ekle (ziyaretçi yorumundan 1 özellik, max 10 kelime).
-5. Günde aktivite sayısı: 5-6 (yolculuk dahil).
+3. Her gün 16:00'da "Serbest Zaman & Alışveriş": gerçek çarşı/pazar/AVM adı, tag "Serbest". (Geçiş günlerinde bu blok olmayabilir.)
+4. Konaklama yapılan günlerde: ${accomOptionsRule}; her seçeneğe kısa "reviewSummary" ekle.
+5. Günde aktivite sayısı: 4-7 (şehir sayısına ve yol süresine göre).
 6. Tag: Kültür, Doğa, Yemek, Akşam, Aktivite, Sabah, Huzur, Keşif, Macera, Gastronomi, Premium, Serbest, Yolculuk.
+7. Yolculuk aktivitesi: title "[Önceki Şehir]'den [Mevcut Şehir]'e Yolculuk", cost "Yakıt ~₺xxx", description "~X saatlik yolculuk."
 ${mealRules}
 
 SADECE JSON yanıt ver:
 
-{"route":[{"day":1,"location":"Şehir","lat":39.9,"lng":32.8,"activities":[{"time":"08:00","title":"[Çıkış]'dan [Şehir]'e Yolculuk","tag":"Yolculuk","cost":"Yakıt ~₺150","description":"~2 saatlik yolculuk.","address":""},{"time":"10:30","title":"Mekan Adı","tag":"Kültür","cost":"Ücretsiz","description":"1 cümle.","address":"Semt"},{"time":"13:00","title":"Restoran Adı","tag":"Yemek","cost":"₺150/kişi","description":"Yöresel lezzetler.","address":"Semt","reviewSummary":"Kuzu tandırı ve meze çeşitleri övülüyor.","alternatives":[{"name":"Alt Restoran 1","address":"Semt","cost":"₺120/kişi","reviewSummary":"Deniz ürünleri tazeliğiyle ünlü."},{"name":"Alt Restoran 2","address":"Semt","cost":"₺90/kişi","reviewSummary":"Uygun fiyatlı, vejetaryen seçenekler var."}]}],"accommodationOptions":[{"type":"kamp","name":"Kamp Adı 1","address":"Semt","cost":"₺xx/gece","facilities":"Elektrik, Duş","reviewSummary":"Temizliği ve doğal ortamı çok beğeniliyor."},{"type":"kamp","name":"Kamp Adı 2","address":"Semt","cost":"₺xx/gece","facilities":"WiFi, Duş","reviewSummary":"Personel yardımsever, tesis bakımlı."},{"type":"kamp","name":"Kamp Adı 3","address":"Semt","cost":"₺xx/gece","facilities":"Havuz, Market","reviewSummary":"Geniş alan, çocuklar için ideal."}]}]}`;
+{"route":[{"day":1,"location":"GeceKalınanŞehir","lat":39.9,"lng":32.8,"activities":[{"time":"08:00","title":"[Çıkış]'dan [Şehir]'e Yolculuk","tag":"Yolculuk","cost":"Yakıt ~₺150","description":"~2 saatlik yolculuk.","address":""},{"time":"10:30","title":"Mekan Adı","tag":"Kültür","cost":"Ücretsiz","description":"1 cümle.","address":"Semt"},{"time":"13:00","title":"Restoran Adı","tag":"Yemek","cost":"₺150/kişi","description":"Yöresel lezzetler.","address":"Semt","reviewSummary":"Kuzu tandırı ve mezeler övülüyor.","alternatives":[{"name":"Alt Restoran 1","address":"Semt","cost":"₺120/kişi","reviewSummary":"Deniz ürünleri tazeliğiyle ünlü."},{"name":"Alt Restoran 2","address":"Semt","cost":"₺90/kişi","reviewSummary":"Uygun fiyatlı, vejetaryen seçenekler var."}]}],"accommodationOptions":[{"type":"kamp","name":"Kamp Adı 1","address":"Semt","cost":"₺xx/gece","facilities":"Elektrik, Duş","reviewSummary":"Temizliği ve doğal ortamı çok beğeniliyor."},{"type":"kamp","name":"Kamp Adı 2","address":"Semt","cost":"₺xx/gece","facilities":"WiFi, Duş","reviewSummary":"Personel yardımsever, tesis bakımlı."},{"type":"kamp","name":"Kamp Adı 3","address":"Semt","cost":"₺xx/gece","facilities":"Havuz, Market","reviewSummary":"Geniş alan, çocuklar için ideal."}]}]}`;
 }
 
 // ─── JSON extractor ───────────────────────────────────────────────────────
@@ -266,12 +287,19 @@ function extractJSON(text) {
 export async function generateCityList(preferences, apiKey, onProgress) {
   if (!apiKey) throw new Error('API_KEY_MISSING');
 
-  onProgress?.('Güzergah şehirleri belirleniyor...');
+  onProgress?.('Güzergah planlanıyor...');
 
   const { startLocation, destination, days } = preferences;
-  const prompt = `${startLocation}'dan ${destination}'a ${days} günlük yolculukta her gün geceleneceği ${days} şehri listele. ${startLocation} dahil etme — orası çıkış noktası, tur boyunca gidilecek yerler değil. Coğrafi açıdan mantıklı sırayla olsun.
-SADECE şu JSON formatında yanıt ver:
-{"cities": ["Şehir1", "Şehir2", "Şehir3"]}`;
+  const prompt = `${startLocation}'dan ${destination}'a ${days} günlük bir tatil planla.
+
+Her şehire turistik değerine göre uygun süre ver — Çankırı gibi az gezilecek şehirlerde 2-3 saat yeterli, geçip devam edilmeli. Ankara, Kapadokya, Antalya gibi büyük yerler için tam gün veya üzeri.
+- 2-4 saat: geçiş durağı (isStopover: true)
+- 5-10 saat: konaklama (isStopover: false)
+
+Toplam ${days} gecelik plan yap. ${startLocation} dahil etme (orası çıkış noktası). Her günün sonunda bir geceleme şehri olsun.
+
+SADECE JSON:
+{"dayPlan":[{"day":1,"overnightCity":"ŞehirAdı","stops":[{"city":"ŞehirAdı","hours":3,"isStopover":true},{"city":"ŞehirAdı","hours":7,"isStopover":false}]},{"day":2,"overnightCity":"ŞehirAdı","stops":[{"city":"ŞehirAdı","hours":8,"isStopover":false}]}]}`;
 
   const response = await fetch(ANTHROPIC_URL, {
     method: 'POST',
@@ -282,7 +310,7 @@ SADECE şu JSON formatında yanıt ver:
     },
     body: JSON.stringify({
       model:      MODEL,
-      max_tokens: 512,
+      max_tokens: 1024,
       messages:   [{ role: 'user', content: prompt }],
     }),
   });
@@ -295,13 +323,27 @@ SADECE şu JSON formatında yanıt ver:
 
   const data = await response.json();
   const text = data?.content?.[0]?.text || '';
-  console.log('[generateCityList] raw:', text.slice(0, 200));
+  console.log('[generateCityList] raw:', text.slice(0, 300));
   try {
     const parsed = extractJSON(text);
-    return Array.isArray(parsed?.cities) ? parsed.cities : [];
+    const dayPlan = Array.isArray(parsed?.dayPlan) ? parsed.dayPlan : [];
+
+    // Build flat allCities list (for display in CitySelection UI)
+    const seen = new Set();
+    const allCities = [];
+    for (const day of dayPlan) {
+      for (const stop of day.stops || []) {
+        if (!seen.has(stop.city)) {
+          seen.add(stop.city);
+          allCities.push({ name: stop.city, hours: stop.hours || 4, isStopover: !!stop.isStopover });
+        }
+      }
+    }
+
+    return { dayPlan, allCities };
   } catch (parseErr) {
     console.error('[generateCityList] JSON parse failed:', parseErr.message);
-    return [];
+    return { dayPlan: [], allCities: [] };
   }
 }
 
@@ -321,14 +363,17 @@ export async function generateAIRoute(preferences, apiKey, onProgress) {
   const prefs = {
     ...preferences,
     visitedPlaces,
-    // Prefer in-preferences vehicleProfile (set by onboarding this session) over stored
     vehicleProfile: preferences.vehicleProfile || storedVehicleProfile || null,
   };
 
-  const cities = prefs.selectedCities;
+  const dayPlan = prefs.dayPlan;
 
-  // Auto-batch: if more than BATCH_SIZE cities, split into multiple calls
-  if (cities && cities.length > BATCH_SIZE) {
+  // Auto-batch: if more than BATCH_SIZE days, split into multiple calls
+  if (dayPlan?.length > BATCH_SIZE) {
+    return _generateBatchedByPlan(prefs, apiKey, onProgress);
+  }
+  // Fallback: if no dayPlan but many cities, batch by cities
+  if (!dayPlan && prefs.selectedCities?.length > BATCH_SIZE) {
     return _generateBatched(prefs, apiKey, onProgress);
   }
 
@@ -414,6 +459,34 @@ async function _generateBatched(prefs, apiKey, onProgress) {
     const route = await _callAPI(batchPrefs, apiKey);
     // Normalize by index — never trust AI's day numbers
     route.forEach((d, i) => { d.day = dayOffset + i + 1; });
+    allDays.push(...route);
+    dayOffset += batches[i].length;
+  }
+
+  return normalizeAIResponse(allDays, prefs);
+}
+
+async function _generateBatchedByPlan(prefs, apiKey, onProgress) {
+  const plan = prefs.dayPlan;
+  const batches = [];
+  for (let i = 0; i < plan.length; i += BATCH_SIZE) {
+    batches.push(plan.slice(i, i + BATCH_SIZE));
+  }
+
+  const allDays = [];
+  let dayOffset = 0;
+
+  for (let i = 0; i < batches.length; i++) {
+    onProgress?.(`Rota oluşturuluyor (${i + 1}/${batches.length})...`);
+    const prevOvernightCity = i > 0 ? batches[i - 1].at(-1).overnightCity : null;
+    const batchPrefs = {
+      ...prefs,
+      dayPlan:      batches[i],
+      days:         batches[i].length,
+      previousCity: prevOvernightCity,
+    };
+    const route = await _callAPI(batchPrefs, apiKey);
+    route.forEach((d, j) => { d.day = dayOffset + j + 1; });
     allDays.push(...route);
     dayOffset += batches[i].length;
   }

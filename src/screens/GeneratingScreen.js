@@ -146,6 +146,7 @@ function ApiKeyForm({ onSubmit, loading }) {
 // ─── City Selection phase ─────────────────────────────────────────────────
 
 function CitySelection({ cities, selectedCities, onToggle, onConfirm, preferences }) {
+  const overnightCount = cities.filter((c) => !c.isStopover && selectedCities.has(c.name)).length;
   return (
     <ScrollView contentContainerStyle={cityStyles.container} showsVerticalScrollIndicator={false}>
       <Text style={cityStyles.title}>🗺️ Güzergah Şehirleri</Text>
@@ -153,36 +154,45 @@ function CitySelection({ cities, selectedCities, onToggle, onConfirm, preference
         {preferences?.startLocation} → {preferences?.destination}
       </Text>
       <Text style={cityStyles.hint}>
-        İstemediğin şehirlerin işaretini kaldır, sonra rotayı oluştur
+        🌙 geceleme · ⚡ kısa geçiş · İstemediğin şehirlerin işaretini kaldır
       </Text>
 
       <View style={cityStyles.chipsWrap}>
         {cities.map((city, idx) => {
-          const selected = selectedCities.has(city);
+          const selected = selectedCities.has(city.name);
           return (
             <TouchableOpacity
-              key={city}
-              style={[cityStyles.chip, selected && cityStyles.chipSelected]}
-              onPress={() => onToggle(city)}
+              key={city.name}
+              style={[
+                cityStyles.chip,
+                city.isStopover && cityStyles.chipStopover,
+                selected && (city.isStopover ? cityStyles.chipStopoverSel : cityStyles.chipSelected),
+              ]}
+              onPress={() => onToggle(city.name)}
               activeOpacity={0.75}
             >
               <Text style={[cityStyles.chipNum, selected && cityStyles.chipNumSel]}>
                 {selected ? '✓' : idx + 1}
               </Text>
-              <Text style={[cityStyles.chipText, selected && cityStyles.chipTextSel]}>{city}</Text>
+              <Text style={[cityStyles.chipText, selected && cityStyles.chipTextSel]}>
+                {city.isStopover ? `⚡ ${city.name}` : `🌙 ${city.name}`}
+              </Text>
+              <Text style={[cityStyles.chipDuration, selected && cityStyles.chipDurationSel]}>
+                {city.hours < 5 ? `~${city.hours}h` : `${city.hours}h`}
+              </Text>
             </TouchableOpacity>
           );
         })}
       </View>
 
       <Text style={cityStyles.selectedCount}>
-        {selectedCities.size} şehir seçili
+        {overnightCount} geceleme · {selectedCities.size} şehir seçili
       </Text>
 
       <TouchableOpacity
-        style={[cityStyles.confirmBtn, selectedCities.size === 0 && { opacity: 0.4 }]}
+        style={[cityStyles.confirmBtn, overnightCount === 0 && { opacity: 0.4 }]}
         onPress={onConfirm}
-        disabled={selectedCities.size === 0}
+        disabled={overnightCount === 0}
         activeOpacity={0.85}
       >
         <Text style={cityStyles.confirmBtnText}>Rotayı Oluştur ✨</Text>
@@ -203,7 +213,10 @@ export default function GeneratingScreen({ navigation, route }) {
   const [stepIdx,       setStepIdx]       = useState(0);
   const [errorMsg,      setErrorMsg]      = useState('');
   const [keyLoading,    setKeyLoading]    = useState(false);
+  // cities: [{name, hours, isStopover}]
   const [cities,        setCities]        = useState([]);
+  // dayPlan: [{day, overnightCity, stops:[{city,hours,isStopover}]}]
+  const [dayPlan,       setDayPlan]       = useState([]);
   const [selectedCities, setSelectedCities] = useState(new Set());
   const [savedApiKey,   setSavedApiKey]   = useState('');
 
@@ -227,26 +240,26 @@ export default function GeneratingScreen({ navigation, route }) {
     return () => clearInterval(t);
   }, [phase]);
 
-  // Phase 1: get city list
+  // Phase 1: get city list + day plan
   const runPhase1 = useCallback(async (overrideKey) => {
     try {
       setPhase('generating_cities');
       const apiKey = overrideKey || await getApiKey();
       if (!apiKey) { setPhase('key_needed'); return; }
 
-      const cityList = await generateCityList(preferences, apiKey, (msg) => setStatus(msg));
+      const result = await generateCityList(preferences, apiKey, (msg) => setStatus(msg));
+      const allCities = result?.allCities || [];
+      const plan      = result?.dayPlan   || [];
 
-      // Deduplicate (AI sometimes returns same city twice)
-      const uniqueCities = [...new Set(cityList)];
-
-      if (uniqueCities.length > 0) {
+      if (allCities.length > 0) {
         setSavedApiKey(apiKey);
-        setCities(uniqueCities);
-        setSelectedCities(new Set(uniqueCities));
+        setCities(allCities);
+        setDayPlan(plan);
+        setSelectedCities(new Set(allCities.map((c) => c.name)));
         setPhase('city_selection');
       } else {
         // No cities returned — skip to full route directly
-        await runPhase2(apiKey, null);
+        await runPhase2(apiKey, null, null);
       }
     } catch (err) {
       console.error('[runPhase1] error:', err?.message, err);
@@ -259,16 +272,33 @@ export default function GeneratingScreen({ navigation, route }) {
     }
   }, [preferences]);
 
-  // Phase 2: generate full route with selected cities
-  const runPhase2 = useCallback(async (apiKey, selCities) => {
+  // Phase 2: generate full route with selected cities + day plan
+  const runPhase2 = useCallback(async (apiKey, selCities, plan) => {
     try {
       setPhase('generating_route');
       const key = apiKey || savedApiKey;
-      const selectedArr = selCities ? Array.from(selCities) : null;
-      // days must match selectedCities count (user may have deselected some)
-      const prefs = selectedArr
-        ? { ...preferences, selectedCities: selectedArr, days: selectedArr.length }
-        : preferences;
+      const selectedSet = selCities instanceof Set ? selCities : null;
+
+      // Filter the day plan to only include days where the overnight city is still selected
+      const filteredPlan = plan?.length
+        ? plan
+            .map((d) => ({
+              ...d,
+              stops: d.stops.filter((s) => !selectedSet || selectedSet.has(s.city)),
+            }))
+            .filter((d) => !selectedSet || selectedSet.has(d.overnightCity))
+        : null;
+
+      // days = number of overnight days in the filtered plan
+      const days = filteredPlan?.length || (selectedSet ? selectedSet.size : preferences.days);
+      const selectedArr = selectedSet ? Array.from(selectedSet) : null;
+
+      const prefs = {
+        ...preferences,
+        selectedCities: selectedArr,
+        dayPlan: filteredPlan,
+        days,
+      };
 
       // Fetch weather for selected cities (optional — continues if API key not set)
       let weatherMap = {};
@@ -301,18 +331,9 @@ export default function GeneratingScreen({ navigation, route }) {
     }
   }, [preferences, savedApiKey]);
 
-  const handleToggleCity = useCallback((city) => {
-    setSelectedCities((prev) => {
-      const next = new Set(prev);
-      if (next.has(city)) next.delete(city);
-      else next.add(city);
-      return next;
-    });
-  }, []);
-
   const handleConfirmCities = useCallback(() => {
-    runPhase2(savedApiKey, selectedCities);
-  }, [savedApiKey, selectedCities, runPhase2]);
+    runPhase2(savedApiKey, selectedCities, dayPlan);
+  }, [savedApiKey, selectedCities, dayPlan, runPhase2]);
 
   const handleKeySubmit = async (key) => {
     setKeyLoading(true);
@@ -353,7 +374,13 @@ export default function GeneratingScreen({ navigation, route }) {
           <CitySelection
             cities={cities}
             selectedCities={selectedCities}
-            onToggle={handleToggleCity}
+            onToggle={(name) => {
+              setSelectedCities((prev) => {
+                const next = new Set(prev);
+                if (next.has(name)) next.delete(name); else next.add(name);
+                return next;
+              });
+            }}
             onConfirm={handleConfirmCities}
             preferences={preferences}
           />
@@ -508,13 +535,22 @@ const cityStyles = StyleSheet.create({
   },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 16, paddingVertical: 10,
+    paddingHorizontal: 14, paddingVertical: 9,
     borderRadius: Radius.full,
     backgroundColor: 'rgba(255,255,255,0.10)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.20)',
   },
+  chipStopover: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderStyle: 'dashed',
+  },
   chipSelected: {
     backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  chipStopoverSel: {
+    backgroundColor: Colors.primary + 'BB',
     borderColor: Colors.primary,
   },
   chipNum: {
@@ -523,10 +559,16 @@ const cityStyles = StyleSheet.create({
   },
   chipNumSel: { color: '#FFFFFF' },
   chipText: {
-    fontSize: Typography.size.base, fontWeight: Typography.weight.semibold,
+    fontSize: Typography.size.sm, fontWeight: Typography.weight.semibold,
     color: Colors.primaryLight,
   },
   chipTextSel: { color: '#FFFFFF' },
+  chipDuration: {
+    fontSize: 10, color: Colors.primaryLight, opacity: 0.6,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 5, paddingVertical: 2, borderRadius: 8,
+  },
+  chipDurationSel: { color: '#FFFFFF', opacity: 0.8 },
   selectedCount: {
     fontSize: Typography.size.sm, color: Colors.primaryLight, opacity: 0.7,
   },
