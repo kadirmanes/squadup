@@ -251,8 +251,7 @@ export const PRESET_ROUTES = [
     bestMonths: [4, 5, 6, 7, 8],       // Mayıs–Eylül
     seasonLabel: 'Mayıs – Eylül',
     seasonEmoji: '🌿',
-    seasonNote: 'Yaylalar ve çay bahçeleri en güzel bu dönemde',
-  },
+    seasonNote: 'Yaylalar ve çay bahçeleri en güzel bu dönemde',  },
   {
     id: 'ege',
     title: 'Ege Kıyısı',
@@ -265,8 +264,7 @@ export const PRESET_ROUTES = [
     bestMonths: [3, 4, 5, 6, 7, 8, 9], // Nisan–Ekim
     seasonLabel: 'Nisan – Ekim',
     seasonEmoji: '☀️',
-    seasonNote: 'Antik kentler ve koy koyu keşif için ideal dönem',
-  },
+    seasonNote: 'Antik kentler ve koy koyu keşif için ideal dönem',  },
   {
     id: 'dogu_anadolu',
     title: 'Doğu Anadolu',
@@ -279,8 +277,7 @@ export const PRESET_ROUTES = [
     bestMonths: [5, 6, 7, 8],          // Haziran–Eylül
     seasonLabel: 'Haziran – Eylül',
     seasonEmoji: '🏔️',
-    seasonNote: 'Kış aylarında yollar kapanabilir, yazı tercih et',
-  },
+    seasonNote: 'Kış aylarında yollar kapanabilir, yazı tercih et',  },
   {
     id: 'akdeniz',
     title: 'Akdeniz',
@@ -293,8 +290,7 @@ export const PRESET_ROUTES = [
     bestMonths: [2, 3, 4, 5, 8, 9, 10],// Mart–Haziran & Eylül–Kasım
     seasonLabel: 'Mar–Haz & Eyl–Kas',
     seasonEmoji: '🌸',
-    seasonNote: 'Temmuz–Ağustos çok sıcak; ilkbahar ve sonbahar mükemmel',
-  },
+    seasonNote: 'Temmuz–Ağustos çok sıcak; ilkbahar ve sonbahar mükemmel',  },
   {
     id: 'kapadokya',
     title: 'Kapadokya',
@@ -307,8 +303,7 @@ export const PRESET_ROUTES = [
     bestMonths: [3, 4, 5, 8, 9, 10],   // Nisan–Haziran & Eylül–Kasım
     seasonLabel: 'Nis–Haz & Eyl–Kas',
     seasonEmoji: '🎈',
-    seasonNote: 'Balon turları için sabah sisi ve ılık hava ideal',
-  },
+    seasonNote: 'Balon turları için sabah sisi ve ılık hava ideal',  },
   {
     id: 'guneybati',
     title: 'Güneybatı',
@@ -321,8 +316,7 @@ export const PRESET_ROUTES = [
     bestMonths: [3, 4, 5, 6, 8, 9],    // Nisan–Temmuz & Eylül–Ekim
     seasonLabel: 'Nisan – Ekim',
     seasonEmoji: '🌊',
-    seasonNote: 'Kelebek Vadisi\'ni görmek için Nisan–Haziran en iyi dönem',
-  },
+    seasonNote: 'Kelebek Vadisi\'ni görmek için Nisan–Haziran en iyi dönem',  },
 ];
 
 const TR_MONTHS     = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
