@@ -14,8 +14,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getVisitedPlaces, getVehicleProfile } from '../utils/storage';
 import { buildWeatherPromptContext } from './weatherService';
 
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL         = 'claude-haiku-4-5-20251001';
+const ANTHROPIC_URL  = 'https://api.anthropic.com/v1/messages';
+const MODEL          = 'claude-haiku-4-5-20251001';  // Phase 1 — city list (fast)
+const MODEL_QUALITY  = 'claude-sonnet-4-6';           // Phase 2 — full route (quality)
 export const API_KEY_STORAGE = 'anthropic_api_key';
 
 // ─── API Key helpers ──────────────────────────────────────────────────────
@@ -157,7 +158,7 @@ function buildPrompt(prefs) {
     startLocation, destination, startDate, endDate, days,
     accommodationType, budget, interests, includeMeals,
     selectedCities, dayPlan, visitedPlaces, previousCity,
-    vehicleProfile, weatherMap,
+    vehicleProfile, weatherMap, tripPace,
   } = prefs;
 
   const accomLabel  = ACCOM_LABELS[accommodationType] || accommodationType;
@@ -165,6 +166,22 @@ function buildPrompt(prefs) {
   const interestStr = (interests || []).length > 0 ? interests.join(', ') : 'genel keşif';
   const isCaravan   = accommodationType === 'caravan';
   const vehicleDesc = isCaravan ? 'karavan (ort. 70 km/h)' : 'araç (ort. 90 km/h)';
+
+  // Trip pace context
+  const paceContext =
+    tripPace === 'aktif'
+      ? `GEZİ TEMPOSU — AKTİF KEŞİF:
+- Günde 5-7 aktivite. Her saati değerlendir, önemli tüm mekanları dahil et.
+- Serbest zaman bloğu ekleme; boş zaman yerine gerçek aktivite ekle.`
+      : tripPace === 'yavas'
+      ? `GEZİ TEMPOSU — YAVAŞ & RAHAT:
+- Günde 2-3 gezi aktivitesi yeterli. Acele etme, şehre ısın.
+- Kamp/konaklama yaşamı da aktivite sayılır: sabah kahvesi kamp alanında, akşam yürüyüşü, kamp kurulumu, ateş başında oturma.
+- "Varış ve Kamp Kurulumu", "Sabah Doğa Yürüyüşü", "Akşam Kamp Keyfi" gibi aktiviteler ekle.
+- Küçük şehirlerde 1-2 aktivite yeterli; gün kısa bitebilir, zorla doldurma.`
+      : `GEZİ TEMPOSU — DENGELİ:
+- Günde 3-5 aktivite. Öne çıkan 2-3 gerçek mekan + yemekler.
+- Kısa serbest zaman ancak gerçek çarşı/pazar varsa ve max 1 saat.`;
 
   // Vehicle / accommodation algorithm context
   let algorithmContext = '';
@@ -257,27 +274,32 @@ AKTİVİTE SÜRE KURALLARI (bu süreleri geçme):
 - Kahvaltı: 30-45 dk, Öğle yemeği: 45-60 dk, Akşam yemeği: 60-90 dk
 - Alışveriş / serbest zaman: max 60 dk — sadece gerçek çarşı/pazar adıyla eklenebilir
 
+${paceContext}
+
+YEMEK SÜRESİ (KESİN SINIR — bir sonraki aktivite bu süreden önce başlamalı):
+- Sabah kahvaltısı: 30-45 dk → sonraki aktivite en geç 45 dk sonra
+- Öğle yemeği: 45-60 dk → sonraki aktivite en geç 60 dk sonra (13:00 yemek → 14:00'te aktivite)
+- Akşam yemeği: 19:30'da başlar, günün SON aktivitesidir, başka aktivite ekleme
+
 DOLDURMA YASAĞI:
 - "Serbest Zaman" bloğunu dolgu olarak kullanma. Gerçek bir çarşı/pazar yoksa ekleme.
-- Bir yemekten hemen sonra serbest zaman ekleme.
-- Küçük şehirlerde (Bartın, Çankırı gibi) 2-3 gerçek aktivite yeterliyse zorla doldurma; gün kısa bitebilir.
-- Aynı mekanı farklı isimle tekrar listeleme (Safranbolu Çarşısı + Serbest Zaman Safranbolu Çarşısı = YASAK).
+- Yemekten hemen sonra serbest zaman ekleme.
+- Küçük şehirlerde 2-3 gerçek aktivite yeterliyse zorla doldurma; gün kısa bitebilir.
+- Aynı mekanı farklı isimle tekrar listeleme YASAK (Safranbolu Çarşısı gezisi + Safranbolu Çarşısı serbest = YASAK).
 
-GÜNLÜK AKTİVİTE AKIŞI:
-- 07:30-08:30: Yolculuk (varış ~10:00-11:00)
-- 10:00-12:30: Sabah aktiviteleri (2-3 mekan)
-- 12:30-13:30: Öğle yemeği (max 1 saat)
-- 13:30-17:30: Öğleden sonra aktiviteleri (2-3 mekan)
-- (Opsiyonel) 17:30-18:30: Çarşı/alışveriş — SADECE gerçek mekan varsa
-- 19:30-21:00: Akşam yemeği
+GÜNLÜK ZAMAN AKIŞI:
+- 07:30-08:30: Yolculuk
+- 10:00-12:30: Sabah aktiviteleri
+- 12:30 civarı: Öğle yemeği (45-60 dk)
+- 13:30-17:30: Öğleden sonra aktiviteleri
+- 19:30: Akşam yemeği (gün sonu)
 
 DİĞER KURALLAR:
 1. Her aktivite başlığında GERÇEK mekan adı kullan (Google Maps'te bulunabilir olmalı).
 2. description: 1 kısa cümle (max 12 kelime).
 3. Konaklama yapılan günlerde: ${accomOptionsRule}; her seçeneğe "reviewSummary" (max 5 kelime) ekle.
-4. Günde aktivite sayısı: 4-7 (şehir sayısına ve yol süresine göre).
-5. Tag: Kültür, Doğa, Yemek, Akşam, Aktivite, Sabah, Huzur, Keşif, Macera, Gastronomi, Premium, Serbest, Yolculuk.
-6. Yolculuk aktivitesi: title "[Önceki Şehir]'den [Mevcut Şehir]'e Yolculuk", cost "Yakıt ~₺xxx", description "~X saatlik yolculuk."
+4. Tag: Kültür, Doğa, Yemek, Akşam, Aktivite, Sabah, Huzur, Keşif, Macera, Gastronomi, Premium, Serbest, Yolculuk.
+5. Yolculuk aktivitesi: title "[Önceki Şehir]'den [Mevcut Şehir]'e Yolculuk", cost "Yakıt ~₺xxx", description "~X saatlik yolculuk."
 ${mealRules}
 
 SADECE JSON yanıt ver (boşluk/satır sonu KULLANMA — kompakt format):
@@ -311,23 +333,28 @@ export async function generateCityList(preferences, apiKey, onProgress) {
 
   const {
     startLocation, destination, days,
-    interests, accommodationType, budget,
+    interests, accommodationType, budget, tripPace,
   } = preferences;
 
   const interestStr = (interests || []).length > 0 ? interests.join(', ') : 'genel keşif';
   const accomLabel  = ACCOM_LABELS[accommodationType] || accommodationType || 'araç';
   const budgetLabel = BUDGET_LABELS[budget] || budget || 'standart';
 
+  const paceCity =
+    tripPace === 'aktif'
+      ? 'Daha fazla şehir ve geçiş durağı ekleyebilirsin. Her gün 1-2 şehir gezilebilir.'
+      : tripPace === 'yavas'
+      ? 'Az şehir, uzun konaklama. Her şehirde en az 1 tam gün. Zorla doldurma, şehirler arasında acele etme.'
+      : 'Dengeli: öne çıkan şehirler + kısa geçiş durakları.';
+
   const prompt = `${startLocation}'dan ${destination}'a ${days} günlük tatil planla.
-Kullanıcı profili: ${interestStr} | ${accomLabel} | ${budgetLabel}
+Kullanıcı profili: ${interestStr} | ${accomLabel} | ${budgetLabel} | tempo: ${tripPace || 'dengeli'}
 
-Her şehire o şehirde BU KULLANICININ yapabileceği aktivite sayısına göre süre ver:
-- Kullanıcının ilgisine uyan az aktivite olan şehir → 2-4 saat (isStopover: true)
-- Kullanıcının ilgisine uyan çok aktivite olan şehir → 5-10 saat (isStopover: false, konaklama)
-- Çok zengin destinasyon (Kapadokya, Antalya gibi) → 8-10 saat veya üzeri
-
-Örnek: "doğa, kamp" seven biri için Kapadokya 10 saat (yürüyüş, balon, ATV), Çankırı 2 saat (geçiş).
-Örnek: "tarih, kültür" seven biri için Safranbolu 8 saat (konaklar, han), Çankırı 3 saat (kale, geçiş).
+Her şehire BU KULLANICININ yapabileceği aktivite sayısına göre süre ver:
+- İlgisine uyan az aktivite olan şehir → 2-4 saat (isStopover: true)
+- İlgisine uyan çok aktivite olan şehir → 5-10 saat (isStopover: false, konaklama)
+- Çok zengin destinasyon → 8-10+ saat
+${paceCity}
 
 Toplam ${days} geceleme olsun. ${startLocation} dahil etme.
 
@@ -422,7 +449,7 @@ async function _callAPI(prefs, apiKey) {
       'content-type':      'application/json',
     },
     body: JSON.stringify({
-      model:      MODEL,
+      model:      MODEL_QUALITY,
       max_tokens: 8192,
       messages:   [{ role: 'user', content: buildPrompt(prefs) }],
     }),

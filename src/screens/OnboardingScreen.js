@@ -233,6 +233,33 @@ const INTEREST_OPTIONS = [
   { id: 'fotograf',   label: '📸 Fotoğrafçılık' },
 ];
 
+const TRIP_PACE_OPTIONS = [
+  {
+    id: 'aktif',
+    label: 'Aktif Keşif',
+    emoji: '🔥',
+    desc: 'Her saati değerlendir, çok yer gör',
+    detail: '5–7 aktivite / gün',
+    bg: '#FBE9E7', color: '#E64A19', border: '#FFAB91',
+  },
+  {
+    id: 'dengeli',
+    label: 'Dengeli Gezi',
+    emoji: '⚖️',
+    desc: 'Öne çıkan yerler + nefes alma zamanı',
+    detail: '3–5 aktivite / gün',
+    bg: '#E3F2FD', color: '#1565C0', border: '#90CAF9',
+  },
+  {
+    id: 'yavas',
+    label: 'Yavaş & Rahat',
+    emoji: '🌿',
+    desc: 'Az yer, çok an — kamp keyfi, doğa sakinliği',
+    detail: '2–3 aktivite / gün',
+    bg: '#E8F5E9', color: '#2E7D32', border: '#A5D6A7',
+  },
+];
+
 const POPULAR_STARTS = ['İstanbul', 'Ankara', 'İzmir', 'Bursa', 'Antalya', 'Adana'];
 const POPULAR_ENDS   = ['Kapadokya', 'Bodrum', 'Rize', 'Trabzon', 'Pamukkale', 'Mardin'];
 
@@ -331,6 +358,7 @@ const STEPS = [
   { key: 'vehicle',       title: 'Araç Profili',    subtitle: 'Araç tipini ve detaylarını belirle', emoji: '🚐' },
   { key: 'budget',        title: 'Bütçe',           subtitle: 'Harcama tercihini belirle',         emoji: '💰' },
   { key: 'interests',     title: 'İlgi Alanları',   subtitle: 'Birden fazla seçebilirsin',         emoji: '✨' },
+  { key: 'tripPace',      title: 'Gezi Temposu',    subtitle: 'Nasıl bir tatil istiyorsun?',        emoji: '🎯' },
 ];
 
 // ─── Calendar Helpers ──────────────────────────────────────────────────────
@@ -655,6 +683,34 @@ function StepInterests({ value, onChange }) {
   );
 }
 
+function StepTripPace({ value, onChange }) {
+  return (
+    <View style={sStyles.stepContent}>
+      {TRIP_PACE_OPTIONS.map((opt) => {
+        const sel = value === opt.id;
+        return (
+          <TouchableOpacity
+            key={opt.id}
+            style={[sStyles.budgetCard, { backgroundColor: opt.bg, borderColor: sel ? opt.color : opt.border }, sel && Shadow.sm]}
+            onPress={() => onChange(opt.id)}
+            activeOpacity={0.8}
+          >
+            <Text style={sStyles.budgetEmoji}>{opt.emoji}</Text>
+            <View style={sStyles.budgetText}>
+              <Text style={[sStyles.budgetLabel, { color: opt.color }]}>{opt.label}</Text>
+              <Text style={sStyles.budgetDesc}>{opt.desc}</Text>
+              <Text style={[sStyles.budgetDesc, { marginTop: 2, fontStyle: 'italic' }]}>{opt.detail}</Text>
+            </View>
+            <View style={[sStyles.radio, { borderColor: opt.color }, sel && { backgroundColor: opt.color }]}>
+              {sel && <View style={sStyles.radioInner} />}
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────
 
 export default function OnboardingScreen({ navigation }) {
@@ -669,6 +725,7 @@ export default function OnboardingScreen({ navigation }) {
   const [budget,         setBudget]         = useState('standart');
   const [interests,      setInterests]      = useState([]);
   const [includeMeals,   setIncludeMeals]   = useState(true);
+  const [tripPace,       setTripPace]       = useState('dengeli');
   const [presetRoute,    setPresetRoute]    = useState(null);
 
   const slideX  = useRef(new Animated.Value(0)).current;
@@ -730,10 +787,11 @@ export default function OnboardingScreen({ navigation }) {
         budget,
         interests,
         includeMeals,
+        tripPace,
       };
       navigation.navigate(Routes.GENERATING, { preferences: prefs });
     }
-  }, [canProceed, isLast, startLocation, destination, startDate, endDate, computedDays, accommodation, vehicleProfile, budget, interests, includeMeals]);
+  }, [canProceed, isLast, startLocation, destination, startDate, endDate, computedDays, accommodation, vehicleProfile, budget, interests, includeMeals, tripPace]);
 
   const goBack = useCallback(() => {
     if (stepIndex > 0) animate(-1, () => setStepIndex((i) => i - 1));
@@ -772,6 +830,8 @@ export default function OnboardingScreen({ navigation }) {
         return <StepBudget value={budget} onChange={setBudget} />;
       case 'interests':
         return <StepInterests value={interests} onChange={setInterests} />;
+      case 'tripPace':
+        return <StepTripPace value={tripPace} onChange={setTripPace} />;
     }
   };
 
