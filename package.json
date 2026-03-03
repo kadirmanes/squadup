@@ -1,5 +1,5 @@
 {
-  "name": "nomadwise-ai",
+  "name": "squadup",
   "version": "1.0.0",
   "main": "expo/AppEntry",
   "scripts": {
@@ -9,19 +9,23 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@expo-google-fonts/orbitron": "^0.3.0",
+    "@expo-google-fonts/rajdhani": "^0.3.0",
     "@react-native-async-storage/async-storage": "2.1.2",
     "@react-navigation/bottom-tabs": "^6.5.20",
     "@react-navigation/native": "^6.1.17",
     "@react-navigation/native-stack": "^6.9.26",
     "babel-preset-expo": "^13.0.0",
     "expo": "^53.0.27",
+    "expo-font": "~13.0.4",
     "expo-linear-gradient": "~14.1.5",
+    "expo-splash-screen": "~0.29.21",
     "expo-status-bar": "~2.2.3",
+    "firebase": "^10.13.0",
     "lucide-react-native": "^0.575.0",
     "react": "19.0.0",
     "react-native": "0.79.6",
     "react-native-gesture-handler": "~2.24.0",
-    "react-native-maps": "1.20.1",
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",

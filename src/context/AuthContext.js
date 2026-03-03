@@ -1,67 +1,118 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const STORAGE_KEY = 'nomadwise_user_v1';
+import { subscribeToAuthState, signInAnon } from '../services/authService';
+import { getUser, setUserOnline } from '../services/firestoreService';
+import { seedProfileService } from '../services/seedProfileService';
 
 const AuthContext = createContext(null);
 
+const ONBOARDING_KEY = '@squadup_onboarded';
+
 export function AuthProvider({ children }) {
-  const [user, setUser]         = useState(null);
+  const [uid, setUid] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
+  const [isOnboarded, setIsOnboarded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Hydrate from storage
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((raw) => { if (raw) setUser(JSON.parse(raw)); })
-      .catch(() => {})
-      .finally(() => setIsLoading(false));
+    let mounted = true;
+
+    const unsubscribe = subscribeToAuthState(async (firebaseUser) => {
+      if (!mounted) return;
+
+      if (firebaseUser) {
+        setUid(firebaseUser.uid);
+
+        try {
+          const [profile, onboardedFlag] = await Promise.all([
+            getUser(firebaseUser.uid),
+            AsyncStorage.getItem(ONBOARDING_KEY),
+          ]);
+
+          if (mounted) {
+            setUserProfile(profile);
+            setIsOnboarded(onboardedFlag === 'true' && profile !== null);
+          }
+
+          if (profile) setUserOnline(firebaseUser.uid, true);
+
+          // Initialize seed profiles in background
+          seedProfileService.initialize();
+        } catch (err) {
+          console.warn('[AuthContext] Error loading user:', err.message);
+          if (mounted) {
+            setUserProfile(null);
+            setIsOnboarded(false);
+          }
+        }
+      } else {
+        try {
+          await signInAnon();
+        } catch (err) {
+          console.error('[AuthContext] Anonymous sign-in failed:', err.message);
+          if (mounted) setIsLoading(false);
+        }
+        return;
+      }
+
+      if (mounted) setIsLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
   }, []);
 
-  const persist = async (data) => {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    setUser(data);
+  const completeOnboarding = async (profile) => {
+    setUserProfile(profile);
+    setIsOnboarded(true);
+    await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
   };
 
-  const login = useCallback(async (email, password) => {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    if (!raw) throw new Error('Bu e-posta ile kayıtlı hesap bulunamadı.');
-    const stored = JSON.parse(raw);
-    if (stored.email.toLowerCase() !== email.toLowerCase())
-      throw new Error('Bu e-posta ile kayıtlı hesap bulunamadı.');
-    if (stored.password !== password)
-      throw new Error('Şifre yanlış. Lütfen tekrar deneyin.');
-    setUser(stored);
-  }, []);
-
-  const register = useCallback(async (name, email, password) => {
-    // Check if email already registered
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const stored = JSON.parse(raw);
-      if (stored.email.toLowerCase() === email.toLowerCase())
-        throw new Error('Bu e-posta adresi zaten kayıtlı.');
+  const refreshProfile = async () => {
+    if (!uid) return;
+    try {
+      const profile = await getUser(uid);
+      setUserProfile(profile);
+    } catch (err) {
+      console.warn('[AuthContext] Refresh error:', err.message);
     }
-    const newUser = { name, email: email.toLowerCase(), password, phone: '', city: '', bio: '', birthDate: '' };
-    await persist(newUser);
-  }, []);
+  };
 
-  const updateProfile = useCallback(async (data) => {
-    const updated = { ...user, ...data };
-    await persist(updated);
-  }, [user]);
-
-  const logout = useCallback(async () => {
-    await AsyncStorage.removeItem(STORAGE_KEY);
-    setUser(null);
-  }, []);
+  const handleSignOut = async () => {
+    try {
+      if (uid) await setUserOnline(uid, false);
+      await AsyncStorage.removeItem(ONBOARDING_KEY);
+      const { signOut } = await import('../services/authService');
+      await signOut();
+      setUid(null);
+      setUserProfile(null);
+      setIsOnboarded(false);
+    } catch (err) {
+      console.warn('[AuthContext] Sign-out error:', err.message);
+    }
+  };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, updateProfile, logout }}>
+    <AuthContext.Provider
+      value={{
+        uid,
+        userProfile,
+        isOnboarded,
+        isLoading,
+        completeOnboarding,
+        refreshProfile,
+        signOut: handleSignOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
 }

@@ -1,26 +1,26 @@
 {
   "expo": {
-    "name": "NomadWise AI",
-    "slug": "nomadwise-ai",
+    "name": "SquadUp",
+    "slug": "squadup",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F5F0E8"
+      "backgroundColor": "#080B12"
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.nomadwise.ai"
+      "bundleIdentifier": "com.squadup.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#F5F0E8"
+        "backgroundColor": "#080B12"
       },
-      "package": "com.nomadwise.ai"
+      "package": "com.squadup.app"
     },
     "web": {
       "favicon": "./assets/favicon.png",

@@ -2,591 +2,455 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Switch,
-  TextInput,
+  StyleSheet,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors } from '../constants/colors';
-import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
-import { useTrip } from '../context/TripContext';
+import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { VIBES, getGame } from '../constants/games';
 import { useAuth } from '../context/AuthContext';
-import AccommodationBadge from '../components/AccommodationBadge';
-import { getWeatherApiKey, saveWeatherApiKey, getVehicleProfile } from '../utils/storage';
-import { VEHICLE_TYPES } from './OnboardingScreen';
-import { Routes } from '../navigation/routes';
+import { useApp } from '../context/AppContext';
+import { getUserStats, updateUser } from '../services/firestoreService';
+import VibeBadge from '../components/VibeBadge';
+import HexButton from '../components/HexButton';
 
-const ACCOM_EMOJI = { caravan: '🚐', camping: '⛺', hotel: '🏨' };
-const BUDGET_EMOJI = { ekonomik: '💚', standart: '✨', lux: '👑' };
-
-function StatBox({ emoji, value, label }) {
-  return (
-    <View style={statStyles.box}>
-      <Text style={statStyles.emoji}>{emoji}</Text>
-      <Text style={statStyles.value}>{value}</Text>
-      <Text style={statStyles.label}>{label}</Text>
-    </View>
-  );
-}
-
-function PastTripCard({ trip }) {
-  return (
-    <View style={[ptStyles.card, Shadow.sm]}>
-      <Text style={ptStyles.emoji}>{trip.emoji}</Text>
-      <View style={ptStyles.info}>
-        <Text style={ptStyles.dest}>{trip.destination}</Text>
-        <Text style={ptStyles.meta}>
-          {trip.days} gün · {ACCOM_EMOJI[trip.accommodationType]} · {BUDGET_EMOJI[trip.budget]}
-        </Text>
-        <Text style={ptStyles.date}>{trip.date}</Text>
-      </View>
-      <TouchableOpacity style={ptStyles.reloadBtn} activeOpacity={0.8}>
-        <Text style={ptStyles.reloadText}>🔁</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-function SettingRow({ emoji, label, description, hasToggle, value, onToggle, onPress }) {
-  return (
-    <TouchableOpacity
-      style={settingStyles.row}
-      onPress={onPress}
-      activeOpacity={hasToggle ? 1 : 0.7}
-    >
-      <Text style={settingStyles.emoji}>{emoji}</Text>
-      <View style={settingStyles.text}>
-        <Text style={settingStyles.label}>{label}</Text>
-        {description && <Text style={settingStyles.desc}>{description}</Text>}
-      </View>
-      {hasToggle ? (
-        <Switch
-          value={value}
-          onValueChange={onToggle}
-          trackColor={{ false: Colors.border, true: Colors.primaryLight }}
-          thumbColor={value ? Colors.primary : Colors.textTertiary}
-        />
-      ) : (
-        <Text style={settingStyles.arrow}>›</Text>
-      )}
-    </TouchableOpacity>
-  );
-}
-
-function getInitials(name = '') {
-  const parts = name.trim().split(' ').filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-export default function ProfileScreen({ navigation }) {
-  const { preferences, tripData, pastTrips, resetTrip } = useTrip();
-  const { user, logout } = useAuth();
-  const [notifications, setNotifications] = useState(true);
-  const [offlineMode, setOfflineMode]     = useState(false);
-  const [weatherKey,  setWeatherKey]      = useState('');
-  const [editingKey,  setEditingKey]      = useState(false);
-  const [vehicleProfile, setVehicleProfile] = useState(null);
+export default function ProfileScreen() {
+  const { uid, userProfile, signOut, refreshProfile } = useAuth();
+  const { requests } = useApp();
+  const [stats, setStats] = useState({ total: 0, accepted: 0, acceptanceRate: 0 });
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [editingVibe, setEditingVibe] = useState(false);
+  const [savingVibe, setSavingVibe] = useState(false);
+  const [selectedVibe, setSelectedVibe] = useState(userProfile?.vibe ?? 'chill');
 
   useEffect(() => {
-    getWeatherApiKey().then((k) => setWeatherKey(k || ''));
-    getVehicleProfile().then(setVehicleProfile);
-  }, []);
+    if (!uid) return;
+    setLoadingStats(true);
+    getUserStats(uid)
+      .then(setStats)
+      .catch(() => {})
+      .finally(() => setLoadingStats(false));
+  }, [uid, requests.length]);
 
-  const handleSaveWeatherKey = async () => {
-    await saveWeatherApiKey(weatherKey);
-    setEditingKey(false);
-    Alert.alert('Kaydedildi', 'Hava durumu API anahtarı kaydedildi.');
+  useEffect(() => {
+    if (userProfile?.vibe) setSelectedVibe(userProfile.vibe);
+  }, [userProfile]);
+
+  const handleSaveVibe = async () => {
+    setSavingVibe(true);
+    try {
+      await updateUser(uid, { vibe: selectedVibe });
+      await refreshProfile();
+      setEditingVibe(false);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to update vibe. ' + err.message);
+    } finally {
+      setSavingVibe(false);
+    }
   };
 
-  const vehicleTypeDef = VEHICLE_TYPES.find((v) => v.id === vehicleProfile?.vehicleType);
+  const handleSignOut = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure? Your profile will be preserved.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign Out', style: 'destructive', onPress: signOut },
+      ],
+    );
+  };
 
-  const accomEmoji = ACCOM_EMOJI[preferences?.accommodationType] || '🧭';
-  const totalDays = pastTrips.reduce((s, t) => s + t.days, 0);
+  const joinDate = userProfile?.createdAt ? formatDate(userProfile.createdAt) : 'Recently';
+
+  const favoriteGame = (() => {
+    if (!userProfile?.games?.length) return null;
+    const sentByGame = {};
+    requests
+      .filter((r) => r.fromUid === uid)
+      .forEach((r) => { sentByGame[r.gameId] = (sentByGame[r.gameId] ?? 0) + 1; });
+    const topGame = Object.entries(sentByGame).sort((a, b) => b[1] - a[1])[0];
+    return getGame(topGame?.[0] ?? userProfile.games[0].gameId);
+  })();
+
+  if (!userProfile) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
-      >
-        {/* Avatar Header */}
+    <View style={styles.container}>
+      <SafeAreaView edges={['top']}>
         <View style={styles.header}>
-          {user?.name ? (
-            <View style={styles.avatarInitialsWrap}>
-              <Text style={styles.avatarInitials}>{getInitials(user.name)}</Text>
-            </View>
-          ) : (
-            <View style={styles.avatar}>
-              <Text style={styles.avatarEmoji}>{accomEmoji}</Text>
-            </View>
-          )}
-          <Text style={styles.username}>{user?.name || 'Gezgin'}</Text>
-          {user?.city ? (
-            <Text style={styles.tagline}>📍 {user.city}</Text>
-          ) : null}
-          <Text style={styles.tagline}>
-            {preferences
-              ? `Aktif: ${preferences.destination} · ${preferences.days} gün`
-              : 'Henüz rota oluşturulmadı'}
-          </Text>
+          <Text style={styles.headerTitle}>PROFILE</Text>
+        </View>
+      </SafeAreaView>
 
-          {/* Kişisel Bilgiler butonu */}
-          <TouchableOpacity
-            style={styles.editProfileBtn}
-            onPress={() => navigation.navigate(Routes.PERSONAL_INFO)}
-            activeOpacity={0.8}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Profile hero card */}
+        <View style={styles.profileCard}>
+          <LinearGradient
+            colors={['rgba(0,255,209,0.08)', 'transparent']}
+            style={StyleSheet.absoluteFill}
+          />
+          <LinearGradient
+            colors={['#00FFD1', '#0094FF']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.avatarGradient}
           >
-            <Text style={styles.editProfileText}>✏️  Kişisel Bilgileri Düzenle</Text>
-          </TouchableOpacity>
-
-          {preferences && (
-            <View style={styles.badgeRow}>
-              <AccommodationBadge type={preferences.accommodationType} />
-              <View
-                style={[
-                  styles.budgetBadge,
-                  { backgroundColor: preferences.budget === 'lux' ? '#FBE9E7' : preferences.budget === 'ekonomik' ? '#E8F5E9' : '#FFF8E1' },
-                ]}
-              >
-                <Text style={styles.budgetBadgeText}>
-                  {BUDGET_EMOJI[preferences.budget]} {preferences.budget.charAt(0).toUpperCase() + preferences.budget.slice(1)}
-                </Text>
-              </View>
+            <View style={styles.avatarInner}>
+              <Text style={styles.avatarText}>
+                {userProfile.username?.[0]?.toUpperCase() ?? '?'}
+              </Text>
             </View>
-          )}
+          </LinearGradient>
+          <Text style={styles.username}>{userProfile.username}</Text>
+          <Text style={styles.joinDate}>JOINED {joinDate.toUpperCase()}</Text>
+          <VibeBadge vibeId={userProfile.vibe} />
         </View>
 
         {/* Stats */}
-        <View style={[styles.statsCard, Shadow.sm]}>
-          <StatBox emoji="🗺️" value={pastTrips.length + (preferences ? 1 : 0)} label="Toplam Seyahat" />
-          <View style={styles.statDivider} />
-          <StatBox emoji="📅" value={totalDays + (preferences?.days || 0)} label="Toplam Gün" />
-          <View style={styles.statDivider} />
-          <StatBox emoji="🏕️" value={`${pastTrips.length * 8 + (tripData?.days?.reduce((s, d) => s + d.activities.length, 0) || 0)}`} label="Aktivite" />
+        <View style={styles.statsRow}>
+          <StatBox value={loadingStats ? '—' : stats.total} label="INVITES SENT" color={COLORS.secondary} />
+          <StatBox value={loadingStats ? '—' : stats.accepted} label="ACCEPTED" color={COLORS.success} />
+          <StatBox value={loadingStats ? '—' : `${stats.acceptanceRate}%`} label="ACCEPT RATE" color={COLORS.primary} />
         </View>
 
-        {/* Premium Upgrade */}
-        <TouchableOpacity style={[styles.premiumCard, Shadow.md]} activeOpacity={0.88}>
-          <View>
-            <Text style={styles.premiumTitle}>👑 NomadWise Premium</Text>
-            <Text style={styles.premiumDesc}>
-              Sesli Rehber, Çevrimdışı Haritalar, Sınırsız Rota
-            </Text>
-          </View>
-          <View style={styles.premiumPriceBox}>
-            <Text style={styles.premiumPrice}>₺99</Text>
-            <Text style={styles.premiumPeriod}>/ay</Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* Past Trips */}
-        {pastTrips.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Geçmiş Seyahatler</Text>
-            <View style={styles.pastList}>
-              {pastTrips.map((trip) => (
-                <PastTripCard key={trip.id} trip={trip} />
-              ))}
+        {/* Favorite game */}
+        {favoriteGame && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>FAVORITE GAME</Text>
+            <View style={[styles.favoriteCard, { borderColor: `${favoriteGame.color}55` }]}>
+              <LinearGradient
+                colors={[`${favoriteGame.color}15`, 'transparent']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={[styles.accentBar, { backgroundColor: favoriteGame.color }]} />
+              <Text style={styles.favoriteEmoji}>{favoriteGame.emoji}</Text>
+              <Text style={[styles.favoriteName, { color: favoriteGame.color }]}>{favoriteGame.name}</Text>
             </View>
-          </>
+          </View>
         )}
 
-        {/* Settings */}
-        <Text style={styles.sectionTitle}>Ayarlar</Text>
-        <View style={[styles.settingsCard, Shadow.sm]}>
-          <SettingRow
-            emoji="👤"
-            label="Kişisel Bilgiler"
-            description={user?.email || 'Ad, e-posta, telefon'}
-            onPress={() => navigation.navigate(Routes.PERSONAL_INFO)}
-          />
-          <View style={styles.settingDivider} />
-          <SettingRow
-            emoji="🔔"
-            label="Bildirimler"
-            description="Rota güncellemeleri ve hatırlatıcılar"
-            hasToggle
-            value={notifications}
-            onToggle={setNotifications}
-          />
-          <View style={styles.settingDivider} />
-          <SettingRow
-            emoji="📥"
-            label="Çevrimdışı Mod"
-            description="Premium özellik"
-            hasToggle
-            value={offlineMode}
-            onToggle={() => {}}
-          />
-          <View style={styles.settingDivider} />
-          <SettingRow emoji="🌍" label="Dil" description="Türkçe" onPress={() => {}} />
-          <View style={styles.settingDivider} />
-          <SettingRow emoji="🎨" label="Tema" description="Açık (Doğal)" onPress={() => {}} />
-          <View style={styles.settingDivider} />
-          <SettingRow emoji="📧" label="Geri Bildirim Gönder" onPress={() => {}} />
-        </View>
+        {/* My games */}
+        {userProfile.games?.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>MY GAMES & RANKS</Text>
+            {userProfile.games.map((g, i) => {
+              const game = getGame(g.gameId);
+              if (!game) return null;
+              return (
+                <View key={i} style={[styles.gameItem, { borderColor: `${game.color}44` }]}>
+                  <View style={[styles.accentBar, { backgroundColor: game.color }]} />
+                  <Text style={styles.gameItemEmoji}>{game.emoji}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.gameItemName}>{game.name}</Text>
+                    <Text style={[styles.gameItemRank, { color: game.color }]}>{g.rank}</Text>
+                  </View>
+                  <View style={styles.regionBadge}>
+                    <Text style={styles.regionText}>{g.region}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
 
-        {/* Vehicle Profile Card */}
-        {vehicleProfile?.vehicleType && (
-          <>
-            <Text style={styles.sectionTitle}>Araç Profili</Text>
-            <View style={[styles.settingsCard, Shadow.sm]}>
-              <View style={settingStyles.row}>
-                <Text style={settingStyles.emoji}>{vehicleTypeDef?.emoji || '🚐'}</Text>
-                <View style={settingStyles.text}>
-                  <Text style={settingStyles.label}>{vehicleTypeDef?.label || vehicleProfile.vehicleType}</Text>
-                  <Text style={settingStyles.desc}>
-                    {[
-                      vehicleProfile.persons && `${vehicleProfile.persons} kişi`,
-                      vehicleProfile.length  && `${vehicleProfile.length}m`,
-                      vehicleProfile.waterTank && `${vehicleProfile.waterTank}L su`,
-                      vehicleProfile.solarPanel && '☀️ Güneş paneli',
-                    ].filter(Boolean).join(' · ')}
-                  </Text>
+        {/* Edit vibe */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>PLAYSTYLE VIBE</Text>
+            {!editingVibe && (
+              <TouchableOpacity onPress={() => setEditingVibe(true)} style={styles.editBtn}>
+                <Text style={styles.editBtnText}>CHANGE</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {editingVibe ? (
+            <View style={{ gap: SPACING.sm }}>
+              {VIBES.map((vibe) => {
+                const isSelected = selectedVibe === vibe.id;
+                return (
+                  <TouchableOpacity
+                    key={vibe.id}
+                    activeOpacity={0.8}
+                    onPress={() => setSelectedVibe(vibe.id)}
+                    style={[
+                      styles.vibeOption,
+                      isSelected && { borderColor: vibe.color, backgroundColor: `${vibe.color}15` },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 22 }}>{vibe.emoji}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.vibeLabel, isSelected && { color: vibe.color }]}>{vibe.label}</Text>
+                      <Text style={styles.vibeSub}>{vibe.sublabel}</Text>
+                    </View>
+                    {isSelected && <View style={[styles.selectedDot, { backgroundColor: vibe.color }]} />}
+                  </TouchableOpacity>
+                );
+              })}
+              <View style={{ flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.xs }}>
+                <TouchableOpacity onPress={() => setEditingVibe(false)} style={styles.cancelBtn}>
+                  <Text style={styles.cancelBtnText}>CANCEL</Text>
+                </TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                  <HexButton
+                    label="SAVE VIBE"
+                    onPress={handleSaveVibe}
+                    loading={savingVibe}
+                    disabled={selectedVibe === userProfile.vibe}
+                  />
                 </View>
               </View>
             </View>
-          </>
-        )}
-
-        {/* API Keys Section */}
-        <Text style={styles.sectionTitle}>API Anahtarları</Text>
-        <View style={[styles.settingsCard, Shadow.sm]}>
-          <View style={apiStyles.row}>
-            <Text style={settingStyles.emoji}>🌤️</Text>
-            <View style={apiStyles.content}>
-              <Text style={settingStyles.label}>OpenWeatherMap</Text>
-              {editingKey ? (
-                <View style={apiStyles.inputRow}>
-                  <TextInput
-                    style={apiStyles.input}
-                    value={weatherKey}
-                    onChangeText={setWeatherKey}
-                    placeholder="API anahtarını gir..."
-                    placeholderTextColor={Colors.textTertiary}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    secureTextEntry
-                  />
-                  <TouchableOpacity style={apiStyles.saveBtn} onPress={handleSaveWeatherKey} activeOpacity={0.8}>
-                    <Text style={apiStyles.saveBtnText}>Kaydet</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <Text style={settingStyles.desc}>
-                  {weatherKey ? '●●●●●●●●' + weatherKey.slice(-4) : 'Ayarlanmadı — openweathermap.org'}
-                </Text>
-              )}
+          ) : (
+            <View style={styles.currentVibe}>
+              <VibeBadge vibeId={userProfile.vibe} />
+              <Text style={styles.vibeHint}>Tap CHANGE to update your playstyle</Text>
             </View>
-            <TouchableOpacity onPress={() => setEditingKey(!editingKey)} style={apiStyles.editBtn} activeOpacity={0.75}>
-              <Text style={apiStyles.editBtnText}>{editingKey ? 'İptal' : 'Düzenle'}</Text>
-            </TouchableOpacity>
-          </View>
+          )}
         </View>
 
-        {/* Reset trip */}
-        {preferences && (
-          <TouchableOpacity
-            style={styles.resetBtn}
-            onPress={resetTrip}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.resetText}>🔄 Rotayı Sıfırla</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Logout */}
-        <TouchableOpacity
-          style={styles.logoutBtn}
-          onPress={() =>
-            Alert.alert(
-              'Çıkış Yap',
-              'Hesabından çıkmak istiyor musun?',
-              [
-                { text: 'Vazgeç', style: 'cancel' },
-                {
-                  text: 'Çıkış Yap', style: 'destructive',
-                  onPress: () => logout(),
-                },
-              ],
-            )
-          }
-          activeOpacity={0.8}
-        >
-          <Text style={styles.logoutText}>🚪 Çıkış Yap</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.version}>NomadWise AI v1.0.0</Text>
-        <View style={{ height: 20 }} />
+        {/* Sign out */}
+        <View style={[styles.section, { marginTop: SPACING.lg, marginBottom: SPACING.xxl }]}>
+          <HexButton label="SIGN OUT" onPress={handleSignOut} variant="outline" />
+        </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+function StatBox({ value, label, color }) {
+  return (
+    <View style={styles.statBox}>
+      <Text style={[styles.statValue, { color }]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function formatDate(ts) {
+  try {
+    const date = ts?.toDate ? ts.toDate() : new Date(ts);
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  } catch {
+    return 'Recently';
+  }
+}
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: Colors.background },
-  content: { paddingHorizontal: Spacing.md },
-
+  container: { flex: 1, backgroundColor: COLORS.background },
+  loadingContainer: { flex: 1, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center' },
   header: {
-    alignItems: 'center',
-    paddingVertical: Spacing.xl,
-    gap: Spacing.sm,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
-  avatar: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: Colors.primaryFaded,
+  headerTitle: {
+    fontFamily: FONTS.orbitron.extraBold,
+    fontSize: 22,
+    color: COLORS.textPrimary,
+    letterSpacing: 2,
+  },
+  scrollContent: { padding: SPACING.lg },
+  profileCard: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+    overflow: 'hidden',
+  },
+  avatarGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: BORDER_RADIUS.full,
+    padding: 2.5,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: Colors.primary,
+    marginBottom: SPACING.xs,
   },
-  avatarInitialsWrap: {
-    width: 84, height: 84, borderRadius: 42,
-    backgroundColor: Colors.primary,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 3, borderColor: Colors.primaryLight,
+  avatarInner: {
+    width: '100%',
+    height: '100%',
+    borderRadius: BORDER_RADIUS.full,
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  avatarInitials: {
-    fontSize: 32, fontWeight: Typography.weight.extrabold,
-    color: '#FFFFFF', letterSpacing: 1,
-  },
-  avatarEmoji: { fontSize: 40 },
-  editProfileBtn: {
-    backgroundColor: Colors.primaryFaded, borderRadius: Radius.xl,
-    paddingHorizontal: Spacing.md, paddingVertical: 8,
-    borderWidth: 1, borderColor: Colors.primary + '40',
-    marginTop: Spacing.xs,
-  },
-  editProfileText: {
-    fontSize: Typography.size.sm, fontWeight: Typography.weight.semibold,
-    color: Colors.primary,
+  avatarText: {
+    fontFamily: FONTS.orbitron.black,
+    fontSize: 32,
+    color: COLORS.primary,
   },
   username: {
-    fontSize: Typography.size.xxl,
-    fontWeight: Typography.weight.extrabold,
-    color: Colors.textPrimary,
-    letterSpacing: -0.5,
+    fontFamily: FONTS.orbitron.bold,
+    fontSize: 22,
+    color: COLORS.textPrimary,
+    letterSpacing: 1,
   },
-  tagline: {
-    fontSize: Typography.size.sm,
-    color: Colors.textTertiary,
+  joinDate: {
+    fontFamily: FONTS.rajdhani.medium,
+    fontSize: 11,
+    color: COLORS.textMuted,
+    letterSpacing: 1.5,
+    marginBottom: SPACING.xs,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    alignItems: 'center',
+    gap: 4,
+  },
+  statValue: {
+    fontFamily: FONTS.orbitron.bold,
+    fontSize: 20,
+    letterSpacing: 0.5,
+  },
+  statLabel: {
+    fontFamily: FONTS.rajdhani.medium,
+    fontSize: 10,
+    color: COLORS.textMuted,
+    letterSpacing: 1,
     textAlign: 'center',
   },
-  badgeRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    marginTop: Spacing.xs,
-  },
-  budgetBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: Radius.full,
-  },
-  budgetBadgeText: {
-    fontSize: Typography.size.xs,
-    fontWeight: Typography.weight.semibold,
-    color: Colors.textSecondary,
-  },
-
-  statsCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.xl,
-    marginBottom: Spacing.lg,
-    padding: Spacing.md,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: Colors.borderLight,
-    marginVertical: Spacing.xs,
-  },
-
-  premiumCard: {
+  section: { gap: SPACING.sm, marginBottom: SPACING.md },
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Colors.accentFaded,
-    borderRadius: Radius.xl,
-    padding: Spacing.md + 4,
-    marginBottom: Spacing.lg,
-    borderWidth: 1.5,
-    borderColor: Colors.accent,
   },
-  premiumTitle: {
-    fontSize: Typography.size.base,
-    fontWeight: Typography.weight.bold,
-    color: Colors.accentDark,
-    marginBottom: 4,
-  },
-  premiumDesc: {
-    fontSize: Typography.size.xs,
-    color: Colors.accentDark + 'BB',
-    maxWidth: '80%',
-  },
-  premiumPriceBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  premiumPrice: {
-    fontSize: Typography.size.xl,
-    fontWeight: Typography.weight.extrabold,
-    color: Colors.accentDark,
-  },
-  premiumPeriod: {
-    fontSize: Typography.size.xs,
-    color: Colors.accentDark,
-    marginBottom: 3,
-  },
-
   sectionTitle: {
-    fontSize: Typography.size.md,
-    fontWeight: Typography.weight.bold,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.sm,
-    marginTop: Spacing.xs,
+    fontFamily: FONTS.orbitron.semiBold,
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    letterSpacing: 2,
   },
-
-  pastList: { gap: Spacing.sm, marginBottom: Spacing.lg },
-
-  settingsCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.xl,
+  editBtn: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    backgroundColor: COLORS.primaryDim,
+    borderRadius: BORDER_RADIUS.sm,
+    borderWidth: 1,
+    borderColor: `${COLORS.primary}55`,
+  },
+  editBtnText: {
+    fontFamily: FONTS.orbitron.bold,
+    fontSize: 10,
+    color: COLORS.primary,
+    letterSpacing: 1,
+  },
+  favoriteCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    gap: SPACING.sm,
     overflow: 'hidden',
-    marginBottom: Spacing.lg,
   },
-  settingDivider: {
-    height: 1,
-    backgroundColor: Colors.borderLight,
-    marginHorizontal: Spacing.md,
+  accentBar: {
+    width: 3,
+    height: '100%',
+    position: 'absolute',
+    left: 0,
+    top: 0,
   },
-
-  resetBtn: {
-    borderWidth: 1.5,
-    borderColor: Colors.error + '60',
-    borderRadius: Radius.xl,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.sm,
+  favoriteEmoji: { fontSize: 28, marginLeft: 10 },
+  favoriteName: {
+    fontFamily: FONTS.rajdhani.bold,
+    fontSize: 18,
+    letterSpacing: 0.5,
   },
-  resetText: {
-    fontSize: Typography.size.sm,
-    color: Colors.error,
-    fontWeight: Typography.weight.semibold,
-  },
-  logoutBtn: {
-    borderWidth: 1.5,
-    borderColor: Colors.error,
-    borderRadius: Radius.xl,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.lg,
-    backgroundColor: Colors.error + '08',
-  },
-  logoutText: {
-    fontSize: Typography.size.sm,
-    color: Colors.error,
-    fontWeight: Typography.weight.bold,
-  },
-
-  version: {
-    textAlign: 'center',
-    fontSize: Typography.size.xs,
-    color: Colors.textTertiary,
-    marginBottom: Spacing.sm,
-  },
-});
-
-const apiStyles = StyleSheet.create({
-  row:       { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, gap: Spacing.sm },
-  content:   { flex: 1 },
-  inputRow:  { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: 4 },
-  input:     { flex: 1, height: 36, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: Spacing.sm, fontSize: Typography.size.sm, color: Colors.textPrimary },
-  saveBtn:   { backgroundColor: Colors.primary, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: 8 },
-  saveBtnText: { fontSize: Typography.size.sm, fontWeight: Typography.weight.bold, color: '#FFF' },
-  editBtn:   { paddingHorizontal: Spacing.sm },
-  editBtnText: { fontSize: Typography.size.sm, color: Colors.primary, fontWeight: Typography.weight.semibold },
-});
-
-const statStyles = StyleSheet.create({
-  box: { flex: 1, alignItems: 'center', gap: 4 },
-  emoji: { fontSize: 22 },
-  value: {
-    fontSize: Typography.size.xl,
-    fontWeight: Typography.weight.extrabold,
-    color: Colors.textPrimary,
-  },
-  label: { fontSize: 10, color: Colors.textTertiary, textAlign: 'center' },
-});
-
-const ptStyles = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.xl,
+  gameItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.md,
-    gap: Spacing.sm,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.sm,
+    gap: SPACING.sm,
+    overflow: 'hidden',
   },
-  emoji: { fontSize: 30 },
-  info: { flex: 1 },
-  dest: {
-    fontSize: Typography.size.base,
-    fontWeight: Typography.weight.bold,
-    color: Colors.textPrimary,
+  gameItemEmoji: { fontSize: 20, marginLeft: 10 },
+  gameItemName: {
+    fontFamily: FONTS.rajdhani.semiBold,
+    fontSize: 14,
+    color: COLORS.textPrimary,
   },
-  meta: {
-    fontSize: Typography.size.xs,
-    color: Colors.textSecondary,
-    marginTop: 2,
+  gameItemRank: {
+    fontFamily: FONTS.rajdhani.medium,
+    fontSize: 12,
   },
-  date: {
-    fontSize: Typography.size.xs,
-    color: Colors.textTertiary,
-    marginTop: 2,
+  regionBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.sm,
   },
-  reloadBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.primaryFaded,
-    alignItems: 'center',
-    justifyContent: 'center',
+  regionText: {
+    fontFamily: FONTS.orbitron.bold,
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    letterSpacing: 1,
   },
-  reloadText: { fontSize: 16 },
-});
-
-const settingStyles = StyleSheet.create({
-  row: {
+  currentVibe: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
+  vibeHint: {
+    fontFamily: FONTS.rajdhani.regular,
+    fontSize: 13,
+    color: COLORS.textMuted,
+    flex: 1,
+  },
+  vibeOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.md,
-    gap: Spacing.sm,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.sm,
+    gap: SPACING.sm,
   },
-  emoji: { fontSize: 20, width: 28, textAlign: 'center' },
-  text: { flex: 1 },
-  label: {
-    fontSize: Typography.size.base,
-    color: Colors.textPrimary,
-    fontWeight: Typography.weight.medium,
+  vibeLabel: {
+    fontFamily: FONTS.rajdhani.bold,
+    fontSize: 16,
+    color: COLORS.textPrimary,
   },
-  desc: {
-    fontSize: Typography.size.xs,
-    color: Colors.textTertiary,
-    marginTop: 2,
+  vibeSub: {
+    fontFamily: FONTS.rajdhani.medium,
+    fontSize: 12,
+    color: COLORS.textSecondary,
   },
-  arrow: {
-    fontSize: 22,
-    color: Colors.textTertiary,
+  selectedDot: { width: 8, height: 8, borderRadius: 4 },
+  cancelBtn: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
+  cancelBtnText: {
+    fontFamily: FONTS.orbitron.bold,
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    letterSpacing: 1,
   },
 });
