@@ -5,6 +5,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  Linking,
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
@@ -80,6 +81,11 @@ function AccommodationOptions({ options }) {
   const opt = options[Math.min(selected, options.length - 1)];
   const icon = ACCOM_ICONS[opt?.type] || ACCOM_ICONS.default;
 
+  const openMaps = () => {
+    const query = opt.address ? `${opt.name} ${opt.address}` : opt.name;
+    Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(query)}`).catch(() => {});
+  };
+
   return (
     <View style={accomStyles.card}>
       <View style={accomStyles.header}>
@@ -87,27 +93,26 @@ function AccommodationOptions({ options }) {
         <Text style={accomStyles.headerText}>Bu Gece Konaklama Seçenekleri</Text>
       </View>
 
-      {/* Type tabs */}
+      {/* Numbered option tabs */}
       <View style={accomStyles.tabs}>
-        {options.map((o, i) => (
+        {options.map((_, i) => (
           <TouchableOpacity
             key={i}
             onPress={() => setSelected(i)}
             style={[accomStyles.tab, selected === i && accomStyles.tabActive]}
             activeOpacity={0.75}
           >
-            <Text style={accomStyles.tabText}>
-              {ACCOM_ICONS[o.type] || '🌙'} {ACCOM_LABELS[o.type] || o.type}
-            </Text>
+            <Text style={accomStyles.tabText}>Seçenek {i + 1}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Selected option details */}
-      <View style={accomStyles.body}>
+      {/* Selected option details — tap to open Google Maps */}
+      <TouchableOpacity style={accomStyles.body} onPress={openMaps} activeOpacity={0.8}>
         <View style={accomStyles.nameRow}>
           <Text style={accomStyles.icon}>{icon}</Text>
           <Text style={accomStyles.name}>{opt.name}</Text>
+          <Text style={accomStyles.mapsHint}>📍 Haritada Gör →</Text>
         </View>
         {opt.address ? (
           <Text style={accomStyles.address}>📍 {opt.address}</Text>
@@ -124,10 +129,13 @@ function AccommodationOptions({ options }) {
             </View>
           ) : null}
         </View>
+        {opt.reviewSummary ? (
+          <Text style={accomStyles.review}>💬 "{opt.reviewSummary}"</Text>
+        ) : null}
         {opt.note ? (
           <Text style={accomStyles.note}>ℹ️ {opt.note}</Text>
         ) : null}
-      </View>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -294,5 +302,7 @@ const accomStyles = StyleSheet.create({
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs },
   pill: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: Radius.full, paddingHorizontal: 10, paddingVertical: 3, maxWidth: '100%' },
   pillText: { fontSize: 10, color: Colors.primaryLight, fontWeight: Typography.weight.medium },
-  note: { fontSize: Typography.size.xs, color: Colors.primaryLight, opacity: 0.75, fontStyle: 'italic' },
+  note:     { fontSize: Typography.size.xs, color: Colors.primaryLight, opacity: 0.75, fontStyle: 'italic' },
+  review:   { fontSize: Typography.size.xs, color: Colors.primaryLight, opacity: 0.9, fontStyle: 'italic', marginTop: 2 },
+  mapsHint: { fontSize: 10, color: Colors.primaryLight, opacity: 0.75, marginLeft: 'auto' },
 });

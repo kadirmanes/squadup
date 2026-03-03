@@ -219,14 +219,41 @@ export default function ActivityDetailScreen({ navigation, route }) {
         <View style={[styles.section, Shadow.sm]}>
           <Text style={styles.sectionTitle}>📝 Hakkında</Text>
           <Text style={styles.description}>{details.description}</Text>
-          {/* Restaurant address + maps link for Yemek tag */}
-          {activity.tag === 'Yemek' && activity.address && (
+          {activity.reviewSummary ? (
+            <Text style={styles.reviewSummary}>💬 "{activity.reviewSummary}"</Text>
+          ) : null}
+          {/* Maps link for any activity with an address */}
+          {activity.address ? (
             <TouchableOpacity style={styles.mapsBtn} onPress={openMaps} activeOpacity={0.8}>
               <Text style={styles.mapsBtnText}>📍 {activity.address}</Text>
-              <Text style={styles.mapsBtnLink}>Haritada Gör →</Text>
+              <Text style={styles.mapsBtnLink}>Google Haritalar →</Text>
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
+
+        {/* Food alternatives */}
+        {activity.alternatives?.length > 0 && (
+          <View style={[styles.section, Shadow.sm]}>
+            <Text style={styles.sectionTitle}>🍽️ Alternatif Restoranlar</Text>
+            {activity.alternatives.map((alt, i) => {
+              const openAltMaps = () => {
+                const q = alt.address ? `${alt.name} ${alt.address}` : alt.name;
+                Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(q)}`).catch(() => {});
+              };
+              return (
+                <TouchableOpacity key={i} style={styles.altCard} onPress={openAltMaps} activeOpacity={0.8}>
+                  <View style={styles.altHeader}>
+                    <Text style={styles.altName}>{alt.name}</Text>
+                    {alt.cost ? <Text style={styles.altCost}>{alt.cost}</Text> : null}
+                  </View>
+                  {alt.address ? <Text style={styles.altAddress}>📍 {alt.address}</Text> : null}
+                  {alt.reviewSummary ? <Text style={styles.altReview}>💬 "{alt.reviewSummary}"</Text> : null}
+                  <Text style={styles.altMapsHint}>Haritada Gör →</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Tips */}
         <View style={[styles.section, Shadow.sm]}>
@@ -364,6 +391,10 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: Typography.size.base, fontWeight: Typography.weight.bold, color: Colors.textPrimary, marginBottom: Spacing.sm },
   description:  { fontSize: Typography.size.sm, color: Colors.textSecondary, lineHeight: 22 },
 
+  reviewSummary: {
+    fontSize: Typography.size.xs, color: Colors.textSecondary, fontStyle: 'italic',
+    marginTop: Spacing.sm, lineHeight: 18,
+  },
   mapsBtn: {
     marginTop: Spacing.sm, backgroundColor: Colors.surface, borderRadius: Radius.lg,
     padding: Spacing.sm, borderWidth: 1, borderColor: Colors.border,
@@ -371,6 +402,17 @@ const styles = StyleSheet.create({
   },
   mapsBtnText: { fontSize: Typography.size.xs, color: Colors.textSecondary, flex: 1 },
   mapsBtnLink: { fontSize: Typography.size.xs, fontWeight: Typography.weight.bold, color: Colors.primary },
+
+  altCard: {
+    backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: Spacing.sm,
+    borderWidth: 1, borderColor: Colors.border, marginTop: Spacing.sm, gap: 3,
+  },
+  altHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  altName:    { fontSize: Typography.size.sm, fontWeight: Typography.weight.bold, color: Colors.textPrimary, flex: 1 },
+  altCost:    { fontSize: Typography.size.xs, fontWeight: Typography.weight.bold, color: Colors.accentDark },
+  altAddress: { fontSize: 11, color: Colors.textTertiary },
+  altReview:  { fontSize: 11, color: Colors.textSecondary, fontStyle: 'italic' },
+  altMapsHint:{ fontSize: 10, color: Colors.primary, fontWeight: Typography.weight.semibold, marginTop: 2 },
 
   tipsList: { gap: Spacing.sm },
   tipRow:   { backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: Spacing.sm + 2 },

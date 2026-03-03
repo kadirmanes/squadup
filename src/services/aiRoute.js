@@ -190,18 +190,27 @@ function buildPrompt(prefs) {
     ? `\nDaha önce görülen (tekrar önerme): ${visitedPlaces.join(', ')}`
     : '';
 
-  // For batch continuation: previous city to compute travel for day 1 of this batch
-  const prevCityNote = previousCity
-    ? `\nBu planın ilk günü ${previousCity}'dan geliyor, yolculuk aktivitesi ekle.`
-    : '';
+  // Day 1 always departs from previousCity (batch continuation) or startLocation (first batch)
+  const day1Origin = previousCity || startLocation;
+  const prevCityNote = `\nBu planın 1. günü ${day1Origin}'dan yola çıkıyor; 1. gün de dahil olmak üzere HER günün ilk aktivitesi yolculuk olsun.`;
+
+  // Accommodation: 3 options of the same type as selected
+  const accomOptionsRule =
+    accommodationType === 'caravan'
+      ? '3 farklı karavan parkı veya kamp alanı öner (tümünde type:"kamp")'
+      : accommodationType === 'camping'
+      ? '3 farklı çadır kamp alanı öner (tümünde type:"kamp")'
+      : '3 farklı otel veya pansiyon öner (tümünde type:"otel")';
 
   const mealRules = includeMeals
     ? `YEMEK:
 - Sabah kahvaltısı (kalkıştan önce veya yolda mola olarak): tag "Yemek", kısa not yeter.
-- Öğle (varışa göre uygun saatte): gerçek restoran adı, yöresel öneri, cost kişi başı. Tag "Yemek".
-- Akşam (19:30 civarı): gerçek restoran adı, cost kişi başı. Tag "Yemek".`
+- Öğle (varışa göre uygun saatte) ve Akşam (19:30 civarı): gerçek restoran adı, cost kişi başı, tag "Yemek".
+  Her öğle/akşam aktivitesine şunları ekle:
+    "reviewSummary": ziyaretçi yorumlarına göre öne çıkan 1 özellik (max 10 kelime),
+    "alternatives": 2 alternatif restoran [{"name","address","cost","reviewSummary"}].`
     : `YEMEK:
-- Öğle ve akşam için tag "Yemek" ekle, genel öneri yeterli.`;
+- Öğle ve akşam: tag "Yemek", gerçek restoran adı, "reviewSummary" ekle (max 10 kelime).`;
 
   return `Sen Türkiye ve Avrupa seyahatlerini çok iyi bilen bir rehbersin.
 
@@ -212,30 +221,27 @@ Bütçe: ${budgetLabel}
 İlgi: ${interestStr}${visitedNote}${prevCityNote}${weatherContext}${algorithmContext}
 
 YOLCULUK KURALLARI (ÇOK ÖNEMLİ):
-- 1. gün: yolculuk aktivitesi YOK, doğrudan gezi yap (başlangıç şehri).
-- 2. gün ve sonrası: İlk aktivite mutlaka 07:30'da şehirlerarası yolculuk olsun.
-  - title: "[Önceki Şehir]'den [Mevcut Şehir]'e Yolculuk"
-  - tag: "Yolculuk"
-  - cost: "Yakıt ~₺xxx" (tahmini mesafeye göre)
-  - description: "~X saatlik yolculuk. [Önemli mola noktası] önerilir."
-  - Varış saatini hesapla: 07:30 + yolculuk süresi.
-  - Sonraki tüm aktiviteler varış saatinden itibaren başlasın.
-- Kısa yollar (1-2 saat): aktiviteler 09:30-10:00'da başlayabilir.
-- Uzun yollar (4-6 saat): aktiviteler 13:00-14:00'da başlasın.
+- HER günün (1. gün dahil) ilk aktivitesi yolculuk olsun.
+  - 1. gün: "${day1Origin}'dan [İlk Şehir]'e Yolculuk" (07:30-08:00 arası başla)
+  - 2. gün ve sonrası: "[Önceki Şehir]'den [Mevcut Şehir]'e Yolculuk" (07:30'da başla)
+  - tag: "Yolculuk", cost: "Yakıt ~₺xxx", description: "~X saatlik yolculuk. [Mola noktası] önerilir."
+  - Varış saatini hesapla, sonraki aktiviteler varıştan itibaren başlasın.
+- Kısa yollar (1-2 saat): sonraki aktiviteler 09:30-10:00'da.
+- Uzun yollar (4-6 saat): sonraki aktiviteler 13:00-14:00'da.
 
 DİĞER KURALLAR:
 0. GÜZERGAH: ${selectedCities?.join(' → ') || `${startLocation} → ${destination}`}. Her şehir için TAM OLARAK 1 gün. Aynı şehirde 2 gün geçirilmez. Şehirleri atlamadan sırayla geç.
 1. Her aktivite başlığında GERÇEK mekan adı kullan.
 2. description: 1 kısa cümle (max 12 kelime).
 3. Her gün 16:00'da "Serbest Zaman & Alışveriş": gerçek çarşı/pazar/AVM adı, tag "Serbest".
-4. Her gün 3 konaklama seçeneği: kamp, otel, kiralık.
-5. Günde aktivite sayısı: yola çıkılan günlerde 5, gezi günlerinde 6.
+4. Her gün ${accomOptionsRule}; her seçeneğe kısa "reviewSummary" ekle (ziyaretçi yorumundan 1 özellik, max 10 kelime).
+5. Günde aktivite sayısı: 5-6 (yolculuk dahil).
 6. Tag: Kültür, Doğa, Yemek, Akşam, Aktivite, Sabah, Huzur, Keşif, Macera, Gastronomi, Premium, Serbest, Yolculuk.
 ${mealRules}
 
 SADECE JSON yanıt ver:
 
-{"route":[{"day":1,"location":"Şehir","lat":39.9,"lng":32.8,"activities":[{"time":"09:00","title":"Mekan Adı","tag":"Kültür","cost":"Ücretsiz","description":"1 cümle.","address":"Semt"}],"accommodationOptions":[{"type":"kamp","name":"Kamp adı","address":"Semt","cost":"₺xx/gece","note":"Not"},{"type":"otel","name":"Otel adı","address":"Semt","cost":"₺xx/gece","note":"Not"},{"type":"kiralık","name":"Daire","address":"Semt","cost":"₺xx/gece","note":"Not"}]}]}`;
+{"route":[{"day":1,"location":"Şehir","lat":39.9,"lng":32.8,"activities":[{"time":"08:00","title":"[Çıkış]'dan [Şehir]'e Yolculuk","tag":"Yolculuk","cost":"Yakıt ~₺150","description":"~2 saatlik yolculuk.","address":""},{"time":"10:30","title":"Mekan Adı","tag":"Kültür","cost":"Ücretsiz","description":"1 cümle.","address":"Semt"},{"time":"13:00","title":"Restoran Adı","tag":"Yemek","cost":"₺150/kişi","description":"Yöresel lezzetler.","address":"Semt","reviewSummary":"Kuzu tandırı ve meze çeşitleri övülüyor.","alternatives":[{"name":"Alt Restoran 1","address":"Semt","cost":"₺120/kişi","reviewSummary":"Deniz ürünleri tazeliğiyle ünlü."},{"name":"Alt Restoran 2","address":"Semt","cost":"₺90/kişi","reviewSummary":"Uygun fiyatlı, vejetaryen seçenekler var."}]}],"accommodationOptions":[{"type":"kamp","name":"Kamp Adı 1","address":"Semt","cost":"₺xx/gece","facilities":"Elektrik, Duş","reviewSummary":"Temizliği ve doğal ortamı çok beğeniliyor."},{"type":"kamp","name":"Kamp Adı 2","address":"Semt","cost":"₺xx/gece","facilities":"WiFi, Duş","reviewSummary":"Personel yardımsever, tesis bakımlı."},{"type":"kamp","name":"Kamp Adı 3","address":"Semt","cost":"₺xx/gece","facilities":"Havuz, Market","reviewSummary":"Geniş alan, çocuklar için ideal."}]}]}`;
 }
 
 // ─── JSON extractor ───────────────────────────────────────────────────────
@@ -263,7 +269,7 @@ export async function generateCityList(preferences, apiKey, onProgress) {
   onProgress?.('Güzergah şehirleri belirleniyor...');
 
   const { startLocation, destination, days } = preferences;
-  const prompt = `${startLocation}'dan ${destination}'a ${days} günlük güzergahta her gün kalınacak şehirleri listele. Coğrafi açıdan mantıklı sırayla, ${days} şehir olsun.
+  const prompt = `${startLocation}'dan ${destination}'a ${days} günlük yolculukta her gün geceleneceği ${days} şehri listele. ${startLocation} dahil etme — orası çıkış noktası, tur boyunca gidilecek yerler değil. Coğrafi açıdan mantıklı sırayla olsun.
 SADECE şu JSON formatında yanıt ver:
 {"cities": ["Şehir1", "Şehir2", "Şehir3"]}`;
 
@@ -492,12 +498,14 @@ function normalizeAIResponse(route, preferences) {
     title:         day.location,
     subtitle:      day.date || day.location,
     activities: (day.activities || []).map((act) => ({
-      time:        act.time,
-      title:       act.title,
-      tag:         act.tag || 'Keşif',
-      cost:        act.cost || null,
-      description: act.description || null,
-      address:     act.address || null,
+      time:          act.time,
+      title:         act.title,
+      tag:           act.tag || 'Keşif',
+      cost:          act.cost || null,
+      description:   act.description || null,
+      address:       act.address || null,
+      reviewSummary: act.reviewSummary || null,
+      alternatives:  act.alternatives || null,
     })),
     accommodationOptions: day.accommodationOptions || null,
     accommodation: day.accommodationOptions?.[0] || day.accommodation || null,
