@@ -13,9 +13,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
 import { useTrip } from '../context/TripContext';
+import { useAuth } from '../context/AuthContext';
 import AccommodationBadge from '../components/AccommodationBadge';
 import { getWeatherApiKey, saveWeatherApiKey, getVehicleProfile } from '../utils/storage';
 import { VEHICLE_TYPES } from './OnboardingScreen';
+import { Routes } from '../navigation/routes';
 
 const ACCOM_EMOJI = { caravan: '🚐', camping: '⛺', hotel: '🏨' };
 const BUDGET_EMOJI = { ekonomik: '💚', standart: '✨', lux: '👑' };
@@ -74,8 +76,16 @@ function SettingRow({ emoji, label, description, hasToggle, value, onToggle, onP
   );
 }
 
+function getInitials(name = '') {
+  const parts = name.trim().split(' ').filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 export default function ProfileScreen({ navigation }) {
   const { preferences, tripData, pastTrips, resetTrip } = useTrip();
+  const { user, logout } = useAuth();
   const [notifications, setNotifications] = useState(true);
   const [offlineMode, setOfflineMode]     = useState(false);
   const [weatherKey,  setWeatherKey]      = useState('');
@@ -106,15 +116,33 @@ export default function ProfileScreen({ navigation }) {
       >
         {/* Avatar Header */}
         <View style={styles.header}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarEmoji}>{accomEmoji}</Text>
-          </View>
-          <Text style={styles.username}>Gezgin</Text>
+          {user?.name ? (
+            <View style={styles.avatarInitialsWrap}>
+              <Text style={styles.avatarInitials}>{getInitials(user.name)}</Text>
+            </View>
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarEmoji}>{accomEmoji}</Text>
+            </View>
+          )}
+          <Text style={styles.username}>{user?.name || 'Gezgin'}</Text>
+          {user?.city ? (
+            <Text style={styles.tagline}>📍 {user.city}</Text>
+          ) : null}
           <Text style={styles.tagline}>
             {preferences
               ? `Aktif: ${preferences.destination} · ${preferences.days} gün`
               : 'Henüz rota oluşturulmadı'}
           </Text>
+
+          {/* Kişisel Bilgiler butonu */}
+          <TouchableOpacity
+            style={styles.editProfileBtn}
+            onPress={() => navigation.navigate(Routes.PERSONAL_INFO)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.editProfileText}>✏️  Kişisel Bilgileri Düzenle</Text>
+          </TouchableOpacity>
 
           {preferences && (
             <View style={styles.badgeRow}>
@@ -171,6 +199,13 @@ export default function ProfileScreen({ navigation }) {
         {/* Settings */}
         <Text style={styles.sectionTitle}>Ayarlar</Text>
         <View style={[styles.settingsCard, Shadow.sm]}>
+          <SettingRow
+            emoji="👤"
+            label="Kişisel Bilgiler"
+            description={user?.email || 'Ad, e-posta, telefon'}
+            onPress={() => navigation.navigate(Routes.PERSONAL_INFO)}
+          />
+          <View style={styles.settingDivider} />
           <SettingRow
             emoji="🔔"
             label="Bildirimler"
@@ -265,6 +300,27 @@ export default function ProfileScreen({ navigation }) {
           </TouchableOpacity>
         )}
 
+        {/* Logout */}
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={() =>
+            Alert.alert(
+              'Çıkış Yap',
+              'Hesabından çıkmak istiyor musun?',
+              [
+                { text: 'Vazgeç', style: 'cancel' },
+                {
+                  text: 'Çıkış Yap', style: 'destructive',
+                  onPress: () => logout(),
+                },
+              ],
+            )
+          }
+          activeOpacity={0.8}
+        >
+          <Text style={styles.logoutText}>🚪 Çıkış Yap</Text>
+        </TouchableOpacity>
+
         <Text style={styles.version}>NomadWise AI v1.0.0</Text>
         <View style={{ height: 20 }} />
       </ScrollView>
@@ -293,7 +349,27 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: Colors.primary,
   },
+  avatarInitialsWrap: {
+    width: 84, height: 84, borderRadius: 42,
+    backgroundColor: Colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 3, borderColor: Colors.primaryLight,
+  },
+  avatarInitials: {
+    fontSize: 32, fontWeight: Typography.weight.extrabold,
+    color: '#FFFFFF', letterSpacing: 1,
+  },
   avatarEmoji: { fontSize: 40 },
+  editProfileBtn: {
+    backgroundColor: Colors.primaryFaded, borderRadius: Radius.xl,
+    paddingHorizontal: Spacing.md, paddingVertical: 8,
+    borderWidth: 1, borderColor: Colors.primary + '40',
+    marginTop: Spacing.xs,
+  },
+  editProfileText: {
+    fontSize: Typography.size.sm, fontWeight: Typography.weight.semibold,
+    color: Colors.primary,
+  },
   username: {
     fontSize: Typography.size.xxl,
     fontWeight: Typography.weight.extrabold,
@@ -400,12 +476,27 @@ const styles = StyleSheet.create({
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.sm,
   },
   resetText: {
     fontSize: Typography.size.sm,
     color: Colors.error,
     fontWeight: Typography.weight.semibold,
+  },
+  logoutBtn: {
+    borderWidth: 1.5,
+    borderColor: Colors.error,
+    borderRadius: Radius.xl,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
+    backgroundColor: Colors.error + '08',
+  },
+  logoutText: {
+    fontSize: Typography.size.sm,
+    color: Colors.error,
+    fontWeight: Typography.weight.bold,
   },
 
   version: {
