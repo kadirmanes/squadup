@@ -11,18 +11,19 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
-import { GAMES, VIBES } from '../constants/games';
+import { GAMES, VIBES, GROUP_SIZES, PLAY_TIMES } from '../constants/games';
 import { useAuth } from '../context/AuthContext';
+import { sendPushNotification } from '../services/notificationService';
 import { useApp } from '../context/AppContext';
-import { sendMatchRequest } from '../services/firestoreService';
+import { sendMatchRequest, blockUser, reportUser, sendFriendRequest } from '../services/firestoreService';
 import { seedProfileService } from '../services/seedProfileService';
 import PlayerCard from '../components/PlayerCard';
 import ShimmerCard from '../components/ShimmerCard';
 import BannerAd from '../components/BannerAd';
 
-export default function FindSquadScreen({ route }) {
-  const { uid } = useAuth();
-  const { players, isLoadingPlayers, playersError, refreshPlayers } = useApp();
+export default function FindSquadScreen({ route, navigation }) {
+  const { uid, userProfile } = useAuth();
+  const { players, isLoadingPlayers, playersError, refreshPlayers, friendUids, pendingFriendUids } = useApp();
   const [refreshing, setRefreshing] = useState(false);
 
   // Filters
@@ -30,17 +31,43 @@ export default function FindSquadScreen({ route }) {
   const initVibe = route?.params?.filterVibe ?? 'all';
   const [activeGame, setActiveGame] = useState(initGame);
   const [activeVibe, setActiveVibe] = useState(initVibe);
+  const [activeRank, setActiveRank] = useState('all');
+  const [activeLookingFor, setActiveLookingFor] = useState('all');
+  const [activePlayTime, setActivePlayTime] = useState('all');
+  const [onlineOnly, setOnlineOnly] = useState(false);
+  const [localBlockedUids, setLocalBlockedUids] = useState(
+    () => new Set(userProfile?.blockedUids ?? [])
+  );
+
+  // Reset rank filter when game changes
+  const handleSetGame = useCallback((gameId) => {
+    setActiveGame((prev) => {
+      const next = prev === gameId ? 'all' : gameId;
+      if (next !== prev) setActiveRank('all');
+      return next;
+    });
+  }, []);
+
+  const selectedGameDef = useMemo(
+    () => (activeGame !== 'all' ? GAMES.find((g) => g.id === activeGame) : null),
+    [activeGame],
+  );
 
   // Track invited player UIDs
   const [invitedUids, setInvitedUids] = useState(new Set());
 
   const filteredPlayers = useMemo(() => {
     return players.filter((p) => {
+      if (localBlockedUids.has(p.uid ?? p.id)) return false;
       if (activeGame !== 'all' && p.gameId !== activeGame) return false;
       if (activeVibe !== 'all' && p.vibe !== activeVibe) return false;
+      if (activeRank !== 'all' && p.rank !== activeRank) return false;
+      if (activeLookingFor !== 'all' && p.lookingFor !== activeLookingFor) return false;
+      if (activePlayTime !== 'all' && !(p.playTimes ?? []).includes(activePlayTime)) return false;
+      if (onlineOnly && !p.isOnline) return false;
       return true;
     });
-  }, [players, activeGame, activeVibe]);
+  }, [players, activeGame, activeVibe, activeRank, activeLookingFor, activePlayTime, onlineOnly, localBlockedUids]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -48,38 +75,104 @@ export default function FindSquadScreen({ route }) {
     setRefreshing(false);
   }, [refreshPlayers]);
 
+  const handleBlock = useCallback(async (player) => {
+    if (!uid) return;
+    const targetUid = player.uid ?? player.id;
+    setLocalBlockedUids((prev) => new Set([...prev, targetUid]));
+    try {
+      await blockUser(uid, targetUid);
+    } catch (err) {
+      setLocalBlockedUids((prev) => { const s = new Set(prev); s.delete(targetUid); return s; });
+      Alert.alert('Hata', 'Engelleme başarısız: ' + err.message);
+    }
+  }, [uid]);
+
+  const handleReport = useCallback(async (player, reason) => {
+    if (!uid) return;
+    try {
+      await reportUser(uid, player.uid ?? player.id, reason);
+    } catch (err) {
+      console.warn('[Report] failed:', err.message);
+    }
+  }, [uid]);
+
+  const handleAddFriend = useCallback(async (player) => {
+    if (!uid) return;
+    const targetUid = player.uid ?? player.id;
+    try {
+      const result = await sendFriendRequest(uid, targetUid);
+      if (result?.autoAccepted) {
+        Alert.alert('Arkadaş!', `${player.username} ile artık arkadaşsınız! 🎉`);
+      } else if (!result?.alreadyFriends) {
+        Alert.alert('İstek Gönderildi', `${player.username} adlı oyuncuya arkadaşlık isteği gönderildi.`);
+      }
+    } catch (err) {
+      console.warn('[AddFriend] failed:', err.message);
+    }
+  }, [uid]);
+
   const handleInvite = useCallback(async (player) => {
     if (!uid) return;
+
+    const myGameIds = userProfile?.gameIds ?? userProfile?.games?.map((g) => g.gameId) ?? [];
+    if (!myGameIds.includes(player.gameId)) {
+      Alert.alert(
+        'Oyun Eşleşmedi',
+        'Bu oyunu profiline eklemeden davet gönderemezsin.',
+        [
+          { text: 'İptal', style: 'cancel' },
+          { text: 'Profile Git', onPress: () => navigation.navigate('Profile') },
+        ]
+      );
+      return;
+    }
+
     try {
       const requestId = await sendMatchRequest(uid, player.uid, player.gameId);
       setInvitedUids((prev) => new Set([...prev, player.uid]));
 
-      // If it's a seed profile, trigger auto-decline
       if (player.isSeed) {
         seedProfileService.handleSeedInvite(requestId);
+      } else if (player.expoPushToken) {
+        await sendPushNotification(
+          player.expoPushToken,
+          '⚔️ New Squad Request!',
+          `${userProfile?.username ?? 'Someone'} wants to squad up with you!`,
+        );
       }
     } catch (err) {
       Alert.alert('Error', 'Failed to send invite. Please try again.\n' + err.message);
     }
-  }, [uid]);
+  }, [uid, userProfile]);
+
+  const handleViewProfile = useCallback((player) => {
+    navigation.navigate('PlayerProfile', { player });
+  }, [navigation]);
 
   const renderPlayer = useCallback(({ item }) => (
     <PlayerCard
       player={item}
       onInvite={handleInvite}
       isInvited={invitedUids.has(item.uid)}
+      onBlock={handleBlock}
+      onReport={handleReport}
+      onAddFriend={handleAddFriend}
+      onViewProfile={handleViewProfile}
+      isFriend={friendUids.has(item.uid)}
+      isPendingFriend={pendingFriendUids.has(item.uid)}
     />
-  ), [handleInvite, invitedUids]);
+  ), [handleInvite, invitedUids, handleBlock, handleReport, handleAddFriend, handleViewProfile, friendUids, pendingFriendUids]);
 
-  const keyExtractor = useCallback((item) => item.uid ?? item.id, []);
+  // _cardKey is uid_gameId for real users (one card per game), or uid for seeds
+  const keyExtractor = useCallback((item) => item._cardKey ?? item.uid ?? item.id, []);
 
   return (
     <View style={styles.container}>
       <SafeAreaView edges={['top']}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>FIND SQUAD</Text>
+          <Text style={styles.headerTitle}>KADRO BUL</Text>
           <Text style={styles.headerCount}>
-            {filteredPlayers.length} <Text style={styles.headerCountSub}>PLAYERS FOUND</Text>
+            {filteredPlayers.length} <Text style={styles.headerCountSub}>OYUNCU BULUNDU</Text>
           </Text>
         </View>
 
@@ -91,11 +184,11 @@ export default function FindSquadScreen({ route }) {
           style={styles.chipScrollGame}
         >
           <FilterChip
-            label="ALL"
+            label="TÜMÜ"
             emoji="🎮"
             active={activeGame === 'all'}
             color={COLORS.primary}
-            onPress={() => setActiveGame('all')}
+            onPress={() => { setActiveGame('all'); setActiveRank('all'); }}
           />
           {GAMES.map((game) => (
             <FilterChip
@@ -104,12 +197,65 @@ export default function FindSquadScreen({ route }) {
               emoji={game.emoji}
               active={activeGame === game.id}
               color={game.color}
-              onPress={() => setActiveGame(activeGame === game.id ? 'all' : game.id)}
+              onPress={() => handleSetGame(game.id)}
             />
           ))}
         </ScrollView>
 
-        {/* Vibe filter chips */}
+        {/* Rank filter chips — sadece bir oyun seçiliyken göster */}
+        {selectedGameDef && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+            style={styles.chipScrollRank}
+          >
+            <FilterChip
+              label="TÜM RANKLAR"
+              emoji="🏆"
+              active={activeRank === 'all'}
+              color={selectedGameDef.color}
+              onPress={() => setActiveRank('all')}
+            />
+            {selectedGameDef.ranks.map((rank) => (
+              <FilterChip
+                key={rank}
+                label={rank.toUpperCase()}
+                active={activeRank === rank}
+                color={selectedGameDef.color}
+                onPress={() => setActiveRank(activeRank === rank ? 'all' : rank)}
+              />
+            ))}
+          </ScrollView>
+        )}
+
+        {/* Grup boyutu filtresi */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipRow}
+          style={styles.chipScrollRank}
+        >
+          <FilterChip
+            label="TÜMÜ"
+            emoji="👾"
+            active={activeLookingFor === 'all'}
+            color={COLORS.primary}
+            onPress={() => setActiveLookingFor('all')}
+          />
+          {GROUP_SIZES.map((gs) => (
+            <FilterChip
+              key={gs.id}
+              label={gs.label}
+              emoji={gs.emoji}
+              active={activeLookingFor === gs.id}
+              color={COLORS.secondary ?? COLORS.primary}
+              onPress={() => setActiveLookingFor(activeLookingFor === gs.id ? 'all' : gs.id)}
+            />
+          ))}
+        </ScrollView>
+
+        {/* Vibe + Online Only */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -117,7 +263,14 @@ export default function FindSquadScreen({ route }) {
           style={styles.chipScrollVibe}
         >
           <FilterChip
-            label="ALL VIBES"
+            label="ÇEVRİMİÇİ"
+            emoji="🟢"
+            active={onlineOnly}
+            color={COLORS.success}
+            onPress={() => setOnlineOnly((v) => !v)}
+          />
+          <FilterChip
+            label="TÜM VİBE"
             emoji="✨"
             active={activeVibe === 'all'}
             color={COLORS.secondary}
@@ -131,6 +284,32 @@ export default function FindSquadScreen({ route }) {
               active={activeVibe === vibe.id}
               color={vibe.color}
               onPress={() => setActiveVibe(activeVibe === vibe.id ? 'all' : vibe.id)}
+            />
+          ))}
+        </ScrollView>
+
+        {/* Oynama Zamanı filtresi */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipRow}
+          style={styles.chipScrollRank}
+        >
+          <FilterChip
+            label="TÜM ZAMAN"
+            emoji="🕐"
+            active={activePlayTime === 'all'}
+            color={COLORS.primary}
+            onPress={() => setActivePlayTime('all')}
+          />
+          {PLAY_TIMES.map((pt) => (
+            <FilterChip
+              key={pt.id}
+              label={pt.label.toUpperCase()}
+              emoji={pt.emoji}
+              active={activePlayTime === pt.id}
+              color={pt.color}
+              onPress={() => setActivePlayTime(activePlayTime === pt.id ? 'all' : pt.id)}
             />
           ))}
         </ScrollView>
@@ -248,6 +427,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   chipScrollGame: { maxHeight: 48 },
+  chipScrollRank: { maxHeight: 44 },
   chipScrollVibe: { maxHeight: 44 },
   chipRow: {
     paddingHorizontal: SPACING.md,

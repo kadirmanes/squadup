@@ -19,12 +19,12 @@ import { createUser } from '../services/firestoreService';
 import HexButton from '../components/HexButton';
 
 const TOTAL_STEPS = 4;
-const STEP_TITLES = ['CHOOSE YOUR NAME', 'YOUR GAMES', 'YOUR VIBE', 'YOUR REGION'];
+const STEP_TITLES = ['KULLANICI ADI', 'OYUNLARIN', 'OYUN TARZI', 'BÖLGE'];
 const STEP_SUBTITLES = [
-  'Pick a username that strikes fear into your opponents.',
-  'Select the games you play and your current rank.',
-  'How do you like to play?',
-  'Which server are you on?',
+  'Rakiplerine korku salan bir kullanıcı adı seç.',
+  'Oynadığın oyunları, rankını, sunucunu ve oyun içi adını gir.',
+  'Nasıl oynamayı seversin?',
+  'Hangi sunucudasın?',
 ];
 
 export default function OnboardingScreen({ navigation }) {
@@ -37,6 +37,7 @@ export default function OnboardingScreen({ navigation }) {
   // Step 2
   const [selectedGames, setSelectedGames] = useState([]);
   const [rankPickerGame, setRankPickerGame] = useState(null);
+  const [serverPickerGame, setServerPickerGame] = useState(null);
   // Step 3
   const [selectedVibe, setSelectedVibe] = useState(null);
   // Step 4
@@ -55,8 +56,15 @@ export default function OnboardingScreen({ navigation }) {
       const exists = prev.find((g) => g.gameId === gameId);
       if (exists) return prev.filter((g) => g.gameId !== gameId);
       const game = GAMES.find((g) => g.id === gameId);
-      return [...prev, { gameId, rank: game.ranks[0] }];
+      return [...prev, {
+        gameId,
+        rank: game.ranks[0],
+        server: game.servers?.[0] ?? null,
+        nickname: '',
+      }];
     });
+    setRankPickerGame(null);
+    setServerPickerGame(null);
   };
 
   const setRankForGame = (gameId, rank) => {
@@ -64,6 +72,19 @@ export default function OnboardingScreen({ navigation }) {
       prev.map((g) => (g.gameId === gameId ? { ...g, rank } : g)),
     );
     setRankPickerGame(null);
+  };
+
+  const setServerForGame = (gameId, server) => {
+    setSelectedGames((prev) =>
+      prev.map((g) => (g.gameId === gameId ? { ...g, server } : g)),
+    );
+    setServerPickerGame(null);
+  };
+
+  const setNicknameForGame = (gameId, nickname) => {
+    setSelectedGames((prev) =>
+      prev.map((g) => (g.gameId === gameId ? { ...g, nickname } : g)),
+    );
   };
 
   const handleNext = async () => {
@@ -87,7 +108,7 @@ export default function OnboardingScreen({ navigation }) {
       await completeOnboarding({ uid, ...userData });
       navigation.replace('Main');
     } catch (err) {
-      Alert.alert('Error', 'Failed to save profile. Please try again.\n' + err.message);
+      Alert.alert('Hata', 'Profil kaydedilemedi. Tekrar dene.\n' + err.message);
     } finally {
       setLoading(false);
     }
@@ -112,7 +133,7 @@ export default function OnboardingScreen({ navigation }) {
         </View>
 
         <View style={styles.header}>
-          <Text style={styles.stepLabel}>STEP {step} OF {TOTAL_STEPS}</Text>
+          <Text style={styles.stepLabel}>ADIM {step} / {TOTAL_STEPS}</Text>
           <Text style={styles.title}>{STEP_TITLES[step - 1]}</Text>
           <Text style={styles.subtitle}>{STEP_SUBTITLES[step - 1]}</Text>
         </View>
@@ -123,11 +144,12 @@ export default function OnboardingScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* ── STEP 1: Username ── */}
           {step === 1 && (
             <View style={styles.stepContainer}>
               <TextInput
                 style={styles.textInput}
-                placeholder="e.g. NightWolf_TR"
+                placeholder="örn. NightWolf_TR"
                 placeholderTextColor={COLORS.textMuted}
                 value={username}
                 onChangeText={setUsername}
@@ -138,11 +160,12 @@ export default function OnboardingScreen({ navigation }) {
               />
               <Text style={styles.hint}>3–20 characters. No spaces.</Text>
               {username.length > 0 && username.length < 3 && (
-                <Text style={styles.error}>Username must be at least 3 characters.</Text>
+                <Text style={styles.error}>Kullanıcı adı en az 3 karakter olmalı.</Text>
               )}
             </View>
           )}
 
+          {/* ── STEP 2: Games ── */}
           {step === 2 && (
             <View style={styles.stepContainer}>
               {GAMES.map((game) => {
@@ -150,6 +173,7 @@ export default function OnboardingScreen({ navigation }) {
                 const isSelected = !!sel;
                 return (
                   <View key={game.id}>
+                    {/* Game row */}
                     <TouchableOpacity
                       activeOpacity={0.8}
                       onPress={() => toggleGame(game.id)}
@@ -165,29 +189,80 @@ export default function OnboardingScreen({ navigation }) {
                     </TouchableOpacity>
 
                     {isSelected && (
-                      <TouchableOpacity
-                        style={[styles.rankSelector, { borderColor: `${game.color}55` }]}
-                        onPress={() => setRankPickerGame(rankPickerGame === game.id ? null : game.id)}
-                      >
-                        <Text style={styles.rankLabel}>Rank:</Text>
-                        <Text style={[styles.rankValue, { color: game.color }]}>{sel.rank}</Text>
-                        <Text style={styles.rankArrow}>{rankPickerGame === game.id ? '▲' : '▼'}</Text>
-                      </TouchableOpacity>
-                    )}
+                      <View style={styles.gameDetails}>
+                        {/* Rank picker */}
+                        <TouchableOpacity
+                          style={[styles.pickerRow, { borderColor: `${game.color}55` }]}
+                          onPress={() => {
+                            setRankPickerGame(rankPickerGame === game.id ? null : game.id);
+                            setServerPickerGame(null);
+                          }}
+                        >
+                          <Text style={styles.pickerLabel}>Rank</Text>
+                          <Text style={[styles.pickerValue, { color: game.color }]}>{sel.rank}</Text>
+                          <Text style={styles.pickerArrow}>{rankPickerGame === game.id ? '▲' : '▼'}</Text>
+                        </TouchableOpacity>
 
-                    {rankPickerGame === game.id && (
-                      <View style={styles.rankList}>
-                        <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled>
-                          {game.ranks.map((rank) => (
+                        {rankPickerGame === game.id && (
+                          <View style={styles.dropdownList}>
+                            <ScrollView style={{ maxHeight: 180 }} nestedScrollEnabled>
+                              {game.ranks.map((rank) => (
+                                <TouchableOpacity
+                                  key={rank}
+                                  style={[styles.dropdownItem, sel.rank === rank && { backgroundColor: `${game.color}22` }]}
+                                  onPress={() => setRankForGame(game.id, rank)}
+                                >
+                                  <Text style={[styles.dropdownItemText, sel.rank === rank && { color: game.color }]}>{rank}</Text>
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                          </View>
+                        )}
+
+                        {/* Server picker (only if game has servers) */}
+                        {game.servers && (
+                          <>
                             <TouchableOpacity
-                              key={rank}
-                              style={[styles.rankItem, sel.rank === rank && { backgroundColor: `${game.color}22` }]}
-                              onPress={() => setRankForGame(game.id, rank)}
+                              style={[styles.pickerRow, { borderColor: `${game.color}55` }]}
+                              onPress={() => {
+                                setServerPickerGame(serverPickerGame === game.id ? null : game.id);
+                                setRankPickerGame(null);
+                              }}
                             >
-                              <Text style={[styles.rankItemText, sel.rank === rank && { color: game.color }]}>{rank}</Text>
+                              <Text style={styles.pickerLabel}>Server</Text>
+                              <Text style={[styles.pickerValue, { color: game.color }]}>{sel.server ?? game.servers[0]}</Text>
+                              <Text style={styles.pickerArrow}>{serverPickerGame === game.id ? '▲' : '▼'}</Text>
                             </TouchableOpacity>
-                          ))}
-                        </ScrollView>
+
+                            {serverPickerGame === game.id && (
+                              <View style={styles.dropdownList}>
+                                <ScrollView style={{ maxHeight: 160 }} nestedScrollEnabled>
+                                  {game.servers.map((srv) => (
+                                    <TouchableOpacity
+                                      key={srv}
+                                      style={[styles.dropdownItem, sel.server === srv && { backgroundColor: `${game.color}22` }]}
+                                      onPress={() => setServerForGame(game.id, srv)}
+                                    >
+                                      <Text style={[styles.dropdownItemText, sel.server === srv && { color: game.color }]}>{srv}</Text>
+                                    </TouchableOpacity>
+                                  ))}
+                                </ScrollView>
+                              </View>
+                            )}
+                          </>
+                        )}
+
+                        {/* In-game nickname */}
+                        <TextInput
+                          style={[styles.nicknameInput, { borderColor: `${game.color}44` }]}
+                          placeholder={game.nicknameHint ?? 'Oyun içi kullanıcı adı (isteğe bağlı)'}
+                          placeholderTextColor={COLORS.textMuted}
+                          value={sel.nickname}
+                          onChangeText={(text) => setNicknameForGame(game.id, text)}
+                          maxLength={40}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                        />
                       </View>
                     )}
                   </View>
@@ -196,6 +271,7 @@ export default function OnboardingScreen({ navigation }) {
             </View>
           )}
 
+          {/* ── STEP 3: Vibe ── */}
           {step === 3 && (
             <View style={styles.stepContainer}>
               {VIBES.map((vibe) => {
@@ -219,6 +295,7 @@ export default function OnboardingScreen({ navigation }) {
             </View>
           )}
 
+          {/* ── STEP 4: Region ── */}
           {step === 4 && (
             <View style={styles.stepContainer}>
               <View style={styles.regionGrid}>
@@ -250,7 +327,7 @@ export default function OnboardingScreen({ navigation }) {
           )}
           <View style={{ flex: 1 }}>
             <HexButton
-              label={step === TOTAL_STEPS ? 'ENTER THE ARENA' : 'NEXT →'}
+              label={step === TOTAL_STEPS ? 'ARENA\'YA GİR' : 'İLERİ →'}
               onPress={handleNext}
               disabled={!canProceed()}
               loading={loading}
@@ -317,6 +394,8 @@ const styles = StyleSheet.create({
   },
   hint: { fontFamily: FONTS.rajdhani.regular, fontSize: 13, color: COLORS.textMuted },
   error: { fontFamily: FONTS.rajdhani.medium, fontSize: 13, color: COLORS.error },
+
+  // Game selection
   gameRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -349,7 +428,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rankSelector: {
+
+  // Game details (rank, server, nickname)
+  gameDetails: {
+    marginLeft: SPACING.lg,
+    gap: 6,
+    marginTop: -4,
+  },
+  pickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surfaceAlt,
@@ -357,28 +443,37 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.sm,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    marginTop: -4,
-    marginLeft: SPACING.lg,
     gap: 6,
   },
-  rankLabel: { fontFamily: FONTS.rajdhani.medium, fontSize: 13, color: COLORS.textSecondary },
-  rankValue: { flex: 1, fontFamily: FONTS.rajdhani.bold, fontSize: 14 },
-  rankArrow: { fontFamily: FONTS.rajdhani.regular, fontSize: 12, color: COLORS.textMuted },
-  rankList: {
+  pickerLabel: { fontFamily: FONTS.rajdhani.medium, fontSize: 13, color: COLORS.textSecondary, width: 50 },
+  pickerValue: { flex: 1, fontFamily: FONTS.rajdhani.bold, fontSize: 14 },
+  pickerArrow: { fontFamily: FONTS.rajdhani.regular, fontSize: 12, color: COLORS.textMuted },
+  dropdownList: {
     backgroundColor: COLORS.surfaceAlt,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: BORDER_RADIUS.sm,
-    marginLeft: SPACING.lg,
     marginTop: -4,
   },
-  rankItem: {
+  dropdownItem: {
     paddingHorizontal: SPACING.md,
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  rankItemText: { fontFamily: FONTS.rajdhani.medium, fontSize: 14, color: COLORS.textSecondary },
+  dropdownItemText: { fontFamily: FONTS.rajdhani.medium, fontSize: 14, color: COLORS.textSecondary },
+  nicknameInput: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderRadius: BORDER_RADIUS.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    fontFamily: FONTS.rajdhani.medium,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+  },
+
+  // Vibe
   vibeCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -393,6 +488,8 @@ const styles = StyleSheet.create({
   vibeLabel: { fontFamily: FONTS.rajdhani.bold, fontSize: 18, color: COLORS.textPrimary, letterSpacing: 0.5 },
   vibeSubLabel: { fontFamily: FONTS.rajdhani.medium, fontSize: 13, color: COLORS.textSecondary },
   selectedDot: { width: 10, height: 10, borderRadius: 5 },
+
+  // Region
   regionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   regionCard: {
     width: '47%',
@@ -407,6 +504,8 @@ const styles = StyleSheet.create({
   regionFlag: { fontSize: 32 },
   regionId: { fontFamily: FONTS.orbitron.bold, fontSize: 16, color: COLORS.textPrimary, letterSpacing: 1 },
   regionLabel: { fontFamily: FONTS.rajdhani.medium, fontSize: 12, color: COLORS.textSecondary },
+
+  // Footer
   footer: {
     flexDirection: 'row',
     alignItems: 'center',

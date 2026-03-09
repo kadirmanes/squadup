@@ -48,7 +48,10 @@ export default function SplashScreen({ navigation }) {
     if (isLoading) return;
 
     const timer = setTimeout(() => {
-      if (!uid) return; // Still authenticating
+      if (!uid) {
+        navigation.replace('Login');
+        return;
+      }
       if (!isOnboarded) {
         navigation.replace('Onboarding');
       } else {

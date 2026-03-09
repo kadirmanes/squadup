@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -9,55 +9,117 @@ import { useApp } from '../context/AppContext';
 import { COLORS } from '../constants/theme';
 
 import SplashScreen from '../screens/SplashScreen';
+import LoginScreen from '../screens/LoginScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import HomeScreen from '../screens/HomeScreen';
 import FindSquadScreen from '../screens/FindSquadScreen';
 import RequestsScreen from '../screens/RequestsScreen';
+import SquadsScreen from '../screens/SquadsScreen';
+import ChatScreen from '../screens/ChatScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import PlayerProfileScreen from '../screens/PlayerProfileScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-function TabIcon({ emoji, focused }) {
+function TabIcon({ emoji, label, focused, badge }) {
   return (
-    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-      <View
-        style={{
-          paddingHorizontal: 12,
-          paddingVertical: 4,
-          borderRadius: 8,
-          backgroundColor: focused ? COLORS.primaryDim : 'transparent',
-        }}
-      >
-        <View style={{ opacity: focused ? 1 : 0.5 }}>
-          {/* emoji rendered as text via tab bar label */}
-        </View>
+    <View style={tabStyles.iconWrapper}>
+      {focused && <View style={tabStyles.activeBar} />}
+      <View style={[tabStyles.iconBox, focused && tabStyles.iconBoxActive]}>
+        <Text style={[tabStyles.emoji, { opacity: focused ? 1 : 0.45 }]}>{emoji}</Text>
       </View>
+      <Text
+        style={[
+          tabStyles.label,
+          { color: focused ? COLORS.primary : COLORS.textMuted, opacity: focused ? 1 : 0.6 },
+        ]}
+      >
+        {label}
+      </Text>
+      {badge > 0 && (
+        <View style={tabStyles.badge}>
+          <Text style={tabStyles.badgeText}>{badge}</Text>
+        </View>
+      )}
     </View>
   );
 }
 
+const tabStyles = StyleSheet.create({
+  iconWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 64,
+    paddingTop: 6,
+  },
+  activeBar: {
+    position: 'absolute',
+    top: 0,
+    width: 32,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: COLORS.primary,
+  },
+  iconBox: {
+    width: 40,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  iconBoxActive: {
+    backgroundColor: COLORS.primaryDim ?? 'rgba(99,102,241,0.15)',
+  },
+  emoji: {
+    fontSize: 18,
+  },
+  label: {
+    fontFamily: 'Rajdhani_700Bold',
+    fontSize: 10,
+    letterSpacing: 0.6,
+    marginTop: 2,
+  },
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontFamily: 'Orbitron_700Bold',
+  },
+});
+
 function MainTabs() {
-  const { pendingRequestCount } = useApp();
+  const { pendingRequestCount, pendingFriendRequestCount } = useApp();
+  const totalPendingCount = pendingRequestCount + pendingFriendRequestCount;
 
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        tabBarShowLabel: false,
         tabBarStyle: {
           backgroundColor: COLORS.surface,
           borderTopColor: COLORS.border,
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 4,
-        },
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textMuted,
-        tabBarLabelStyle: {
-          fontFamily: 'Rajdhani_600SemiBold',
-          fontSize: 11,
-          letterSpacing: 0.5,
+          height: 68,
+          paddingBottom: 6,
+          paddingTop: 0,
+          elevation: 12,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -3 },
+          shadowOpacity: 0.3,
+          shadowRadius: 6,
         },
       }}
     >
@@ -65,11 +127,8 @@ function MainTabs() {
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarLabel: 'HOME',
           tabBarIcon: ({ focused }) => (
-            <View style={{ opacity: focused ? 1 : 0.5 }}>
-              {/* Icon placeholder — use lucide-react-native in screen */}
-            </View>
+            <TabIcon emoji="🏠" label="HOME" focused={focused} />
           ),
         }}
       />
@@ -77,9 +136,8 @@ function MainTabs() {
         name="FindSquad"
         component={FindSquadScreen}
         options={{
-          tabBarLabel: 'FIND SQUAD',
           tabBarIcon: ({ focused }) => (
-            <View style={{ opacity: focused ? 1 : 0.5 }} />
+            <TabIcon emoji="🔍" label="FIND" focused={focused} />
           ),
         }}
       />
@@ -87,16 +145,17 @@ function MainTabs() {
         name="Requests"
         component={RequestsScreen}
         options={{
-          tabBarLabel: 'REQUESTS',
-          tabBarBadge: pendingRequestCount > 0 ? pendingRequestCount : undefined,
-          tabBarBadgeStyle: {
-            backgroundColor: COLORS.primary,
-            color: COLORS.background,
-            fontSize: 10,
-            fontFamily: 'Orbitron_700Bold',
-          },
           tabBarIcon: ({ focused }) => (
-            <View style={{ opacity: focused ? 1 : 0.5 }} />
+            <TabIcon emoji="📬" label="REQUESTS" focused={focused} badge={totalPendingCount} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Squads"
+        component={SquadsScreen}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon emoji="🎮" label="SQUADS" focused={focused} />
           ),
         }}
       />
@@ -104,9 +163,8 @@ function MainTabs() {
         name="Profile"
         component={ProfileScreen}
         options={{
-          tabBarLabel: 'PROFILE',
           tabBarIcon: ({ focused }) => (
-            <View style={{ opacity: focused ? 1 : 0.5 }} />
+            <TabIcon emoji="👤" label="PROFILE" focused={focused} />
           ),
         }}
       />
@@ -128,17 +186,25 @@ function RootNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {!uid ? (
-        <Stack.Screen name="Splash" component={SplashScreen} options={{ animation: 'fade' }} />
+        // Giriş yapılmamış → Splash + Login
+        <>
+          <Stack.Screen name="Splash" component={SplashScreen} options={{ animation: 'fade' }} />
+          <Stack.Screen name="Login" component={LoginScreen} options={{ animation: 'fade' }} />
+        </>
       ) : !isOnboarded ? (
+        // Giriş yapılmış ama profil yok → Onboarding
         <>
           <Stack.Screen name="Splash" component={SplashScreen} options={{ animation: 'fade' }} />
           <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ animation: 'slide_from_right', gestureEnabled: false }} />
         </>
       ) : (
+        // Tam giriş → Ana uygulama
         <>
           <Stack.Screen name="Splash" component={SplashScreen} options={{ animation: 'fade' }} />
           <Stack.Screen name="Main" component={MainTabs} options={{ animation: 'fade' }} />
           <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ animation: 'slide_from_right', gestureEnabled: false }} />
+          <Stack.Screen name="Chat" component={ChatScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="PlayerProfile" component={PlayerProfileScreen} options={{ animation: 'slide_from_right' }} />
         </>
       )}
     </Stack.Navigator>

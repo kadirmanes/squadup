@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { subscribeToAuthState, signInAnon } from '../services/authService';
-import { getUser, setUserOnline } from '../services/firestoreService';
+import { subscribeToAuthState, signInAnon, signInWithGoogle as googleSignIn, signOut as authSignOut } from '../services/authService';
+import { getUser, setUserOnline, deleteUserDocument } from '../services/firestoreService';
 import { seedProfileService } from '../services/seedProfileService';
+import { notifyGamePlayers, notifyFriendsOnline } from '../services/notificationService';
 
 const AuthContext = createContext(null);
 
@@ -13,6 +15,10 @@ export function AuthProvider({ children }) {
   const [userProfile, setUserProfile] = useState(null);
   const [isOnboarded, setIsOnboarded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  // Google sign-in işlem durumu (LoginScreen'de kullanılır)
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  // Tracks old anonymous UID to clean up after Google sign-in
+  const pendingCleanupRef = useRef(null);
 
   useEffect(() => {
     let mounted = true;
@@ -22,6 +28,12 @@ export function AuthProvider({ children }) {
 
       if (firebaseUser) {
         setUid(firebaseUser.uid);
+
+        // Clean up orphaned anonymous document if UID changed after Google sign-in
+        if (pendingCleanupRef.current && pendingCleanupRef.current !== firebaseUser.uid) {
+          deleteUserDocument(pendingCleanupRef.current).catch(console.warn);
+          pendingCleanupRef.current = null;
+        }
 
         try {
           const [profile, onboardedFlag] = await Promise.all([
@@ -34,9 +46,20 @@ export function AuthProvider({ children }) {
             setIsOnboarded(onboardedFlag === 'true' && profile !== null);
           }
 
-          if (profile) setUserOnline(firebaseUser.uid, true);
+          if (profile) {
+            setUserOnline(firebaseUser.uid, true);
+            // Notify friends that this user is online (targeted, no cooldown needed)
+            const friendIds = profile.friendIds ?? [];
+            if (friendIds.length && profile.username) {
+              notifyFriendsOnline(firebaseUser.uid, profile.username, friendIds).catch(console.warn);
+            }
+            // Notify same-game players that this user is online (fire-and-forget)
+            const gameIds = profile.gameIds || profile.games?.map((g) => g.gameId) || [];
+            if (gameIds.length && profile.username) {
+              notifyGamePlayers(firebaseUser.uid, profile.username, gameIds).catch(console.warn);
+            }
+          }
 
-          // Initialize seed profiles in background
           seedProfileService.initialize();
         } catch (err) {
           console.warn('[AuthContext] Error loading user:', err.message);
@@ -46,13 +69,12 @@ export function AuthProvider({ children }) {
           }
         }
       } else {
-        try {
-          await signInAnon();
-        } catch (err) {
-          console.error('[AuthContext] Anonymous sign-in failed:', err.message);
-          if (mounted) setIsLoading(false);
+        // Kullanıcı yok — login ekranını göster
+        if (mounted) {
+          setUid(null);
+          setUserProfile(null);
+          setIsOnboarded(false);
         }
-        return;
       }
 
       if (mounted) setIsLoading(false);
@@ -63,6 +85,47 @@ export function AuthProvider({ children }) {
       unsubscribe();
     };
   }, []);
+
+  // ── AppState: mark online/offline as app moves to foreground/background ──
+  useEffect(() => {
+    if (!uid) return;
+
+    const handleAppStateChange = (nextState) => {
+      if (nextState === 'active') {
+        setUserOnline(uid, true);
+      } else {
+        // 'background' or 'inactive' (covers home button, task switcher, force-kill)
+        setUserOnline(uid, false);
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [uid]);
+
+  const signInWithGoogle = async () => {
+    setIsSigningIn(true);
+    try {
+      const { previousAnonUid } = await googleSignIn();
+      // If UID is going to change (credential-already-in-use path),
+      // store the old anonymous UID so the auth state handler can delete it
+      if (previousAnonUid) {
+        pendingCleanupRef.current = previousAnonUid;
+      }
+      // Auth state değişimi yukarıdaki listener'ı tetikler
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const continueAsGuest = async () => {
+    setIsSigningIn(true);
+    try {
+      await signInAnon();
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
 
   const completeOnboarding = async (profile) => {
     setUserProfile(profile);
@@ -84,8 +147,7 @@ export function AuthProvider({ children }) {
     try {
       if (uid) await setUserOnline(uid, false);
       await AsyncStorage.removeItem(ONBOARDING_KEY);
-      const { signOut } = await import('../services/authService');
-      await signOut();
+      await authSignOut();
       setUid(null);
       setUserProfile(null);
       setIsOnboarded(false);
@@ -101,6 +163,9 @@ export function AuthProvider({ children }) {
         userProfile,
         isOnboarded,
         isLoading,
+        isSigningIn,
+        signInWithGoogle,
+        continueAsGuest,
         completeOnboarding,
         refreshProfile,
         signOut: handleSignOut,

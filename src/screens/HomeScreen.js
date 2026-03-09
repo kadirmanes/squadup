@@ -13,27 +13,31 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import { GAMES } from '../constants/games';
 import { useAuth } from '../context/AuthContext';
+import { useApp } from '../context/AppContext';
 import GameCard from '../components/GameCard';
 import BannerAd from '../components/BannerAd';
 
 const { width } = Dimensions.get('window');
 
-const STATS = [
-  { value: '24,891', label: 'Active Players' },
-  { value: '5', label: 'Games' },
-  { value: '<30s', label: 'Match Time' },
-];
-
 const HOW_IT_WORKS = [
-  { step: '01', title: 'Select Game', desc: 'Choose from 5 top competitive games', icon: '🎮' },
-  { step: '02', title: 'Choose Vibe', desc: 'Pick your playstyle: tryhard, chill, learn, or silent', icon: '⚡' },
-  { step: '03', title: 'Find Squad', desc: 'Instant matches with same rank & vibe players', icon: '🏆' },
+  { step: '01', title: 'Oyun Seç', desc: '5 rekabetçi oyun arasından seç', icon: '🎮' },
+  { step: '02', title: 'Vibe Seç', desc: 'Oyun tarzını belirle: tryhard, chill, öğren veya sessiz', icon: '⚡' },
+  { step: '03', title: 'Kadro Bul', desc: 'Aynı rank ve vibe\'daki oyuncularla anında eşleş', icon: '🏆' },
 ];
 
 export default function HomeScreen({ navigation }) {
   const { userProfile } = useAuth();
+  const { players } = useApp();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
+
+  // Gerçek + seed oyuncu sayısı (canlı)
+  const realPlayerCount = players.filter((p) => !p.isSeed).length + 1; // +1 for current user
+  const STATS = [
+    { value: realPlayerCount > 0 ? realPlayerCount.toLocaleString('tr-TR') : '—', label: 'Aktif Oyuncu' },
+    { value: '5', label: 'Oyun' },
+    { value: '<30s', label: 'Eşleşme' },
+  ];
 
   useEffect(() => {
     Animated.parallel([
@@ -53,7 +57,7 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>
-              {userProfile ? `WELCOME BACK, ${userProfile.username?.toUpperCase()}` : 'WELCOME TO'}
+              {userProfile ? `HOŞ GELDİN, ${userProfile.username?.toUpperCase()}` : 'HOŞ GELDİN'}
             </Text>
             <LinearGradient
               colors={['#00FFD1', '#0094FF']}
@@ -65,7 +69,7 @@ export default function HomeScreen({ navigation }) {
           </View>
           <View style={styles.onlineBadge}>
             <View style={styles.onlineDot} />
-            <Text style={styles.onlineText}>LIVE</Text>
+            <Text style={styles.onlineText}>CANLI</Text>
           </View>
         </View>
       </SafeAreaView>
@@ -102,7 +106,7 @@ export default function HomeScreen({ navigation }) {
               style={styles.ctaBtn}
             >
               <Text style={styles.ctaIcon}>⚡</Text>
-              <Text style={styles.ctaText}>FIND MY SQUAD NOW</Text>
+              <Text style={styles.ctaText}>HEMEN KADRO BUL</Text>
               <Text style={styles.ctaArrow}>→</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -110,9 +114,9 @@ export default function HomeScreen({ navigation }) {
           {/* Select Your Game */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>SELECT YOUR GAME</Text>
+              <Text style={styles.sectionTitle}>OYUNUNU SEÇ</Text>
               <TouchableOpacity onPress={() => navigation.navigate('FindSquad')}>
-                <Text style={styles.sectionMore}>SEE ALL →</Text>
+                <Text style={styles.sectionMore}>TÜMÜ →</Text>
               </TouchableOpacity>
             </View>
             <ScrollView
@@ -128,7 +132,7 @@ export default function HomeScreen({ navigation }) {
 
           {/* How It Works */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>HOW IT WORKS</Text>
+            <Text style={styles.sectionTitle}>NASIL ÇALIŞIR</Text>
             <View style={styles.howItWorksRow}>
               {HOW_IT_WORKS.map((item, i) => (
                 <React.Fragment key={item.step}>
@@ -152,13 +156,13 @@ export default function HomeScreen({ navigation }) {
 
           {/* Vibe section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>PLAY YOUR WAY</Text>
+            <Text style={styles.sectionTitle}>KENDİ TARZIYLA OYNA</Text>
             <View style={styles.vibeGrid}>
               {[
-                { emoji: '😤', label: 'TRYHARD', sublabel: 'Rank up mode', color: '#FF4444' },
-                { emoji: '😂', label: 'CHILL', sublabel: 'Fun first', color: '#00D084' },
-                { emoji: '🎓', label: 'LEARN', sublabel: 'Improve daily', color: '#0094FF' },
-                { emoji: '🔥', label: 'SILENT', sublabel: 'No toxicity', color: '#FF8C00' },
+                { emoji: '😤', label: 'TRYHARD', sublabel: 'Rank odaklı', color: '#FF4444' },
+                { emoji: '😂', label: 'CHILL', sublabel: 'Eğlence önce', color: '#00D084' },
+                { emoji: '🎓', label: 'LEARN', sublabel: 'Gelişim modu', color: '#0094FF' },
+                { emoji: '🔥', label: 'SILENT', sublabel: 'Toxicsiz oyun', color: '#FF8C00' },
               ].map((v) => (
                 <TouchableOpacity
                   key={v.label}

@@ -12,3 +12,10 @@ web-build/
 .env
 .env.local
 .env.production
+
+# Firebase sensitive config
+google-services.json
+GoogleService-Info.plist
+
+# EAS / Expo
+.easignore
