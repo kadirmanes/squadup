@@ -13,8 +13,7 @@ web-build/
 .env.local
 .env.production
 
-# Firebase sensitive config
-google-services.json
+# Firebase sensitive config (google-services.json is tracked - client config only)
 GoogleService-Info.plist
 
 # EAS / Expo
