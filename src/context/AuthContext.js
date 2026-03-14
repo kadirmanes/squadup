@@ -41,9 +41,14 @@ export function AuthProvider({ children }) {
             AsyncStorage.getItem(ONBOARDING_KEY),
           ]);
 
+          // Restore onboarding flag for existing users on fresh installs
+          if (profile && onboardedFlag !== 'true') {
+            await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+          }
+
           if (mounted) {
             setUserProfile(profile);
-            setIsOnboarded(onboardedFlag === 'true' && profile !== null);
+            setIsOnboarded(profile !== null);
           }
 
           if (profile) {
