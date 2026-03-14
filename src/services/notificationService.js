@@ -2,9 +2,6 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-
-// Hardcoded fallback — matches app.json extra.eas.projectId
-const EAS_PROJECT_ID = '0f6bbedd-09e9-4268-bafb-428a44b1a82f';
 import {
   doc,
   getDoc,
@@ -17,6 +14,9 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { GAMES } from '../constants/games';
+
+// Hardcoded fallback — matches app.json extra.eas.projectId
+const EAS_PROJECT_ID = '0f6bbedd-09e9-4268-bafb-428a44b1a82f';
 
 // Android 8+ requires a notification channel
 if (Platform.OS === 'android') {
