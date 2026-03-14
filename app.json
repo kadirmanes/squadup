@@ -21,9 +21,6 @@
         "backgroundColor": "#080B12"
       },
       "package": "com.squadup.app",
-      "versionCode": 1,
-      "minSdkVersion": 23,
-      "targetSdkVersion": 34,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.INTERNET",
@@ -68,7 +65,8 @@
         {
           "photosPermission": "SquadUp profil fotoğrafın için galeriye erişmek istiyor."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {
