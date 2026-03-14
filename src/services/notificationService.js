@@ -1,6 +1,10 @@
 import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+
+// Hardcoded fallback — matches app.json extra.eas.projectId
+const EAS_PROJECT_ID = '0f6bbedd-09e9-4268-bafb-428a44b1a82f';
 import {
   doc,
   getDoc,
@@ -35,6 +39,12 @@ Notifications.setNotificationHandler({
 
 export async function registerForPushNotifications(uid) {
   try {
+    // Push notifications only work on physical devices
+    if (!Device.isDevice) {
+      console.warn('[Notifications] Must use a physical device for push notifications');
+      return null;
+    }
+
     const { status: existing } = await Notifications.getPermissionsAsync();
     let finalStatus = existing;
     if (existing !== 'granted') {
@@ -46,10 +56,14 @@ export async function registerForPushNotifications(uid) {
       return null;
     }
 
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-    if (!projectId) {
-      console.warn('[Notifications] No projectId found in app.json');
-    }
+    // Try multiple sources for projectId, fallback to hardcoded value
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      Constants.easConfig?.projectId ??
+      EAS_PROJECT_ID;
+
+    console.log('[Notifications] Using projectId:', projectId);
+
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     const token = tokenData.data;
     console.log('[Notifications] Push token:', token);
