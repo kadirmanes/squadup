@@ -9,13 +9,24 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "../squadup-7210c-firebase-adminsdk-fbsvc-7688e0fa83.json",
+        "track": "internal"
+      }
+    }
   }
 }
