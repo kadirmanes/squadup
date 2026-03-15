@@ -41,6 +41,43 @@
           ]
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:142962124885:android:2046a6c404987389534cdc",
+        "android_client_info": {
+          "package_name": "com.squadup.gamematch"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "142962124885-jmp7g0or3j05ljg14upnog4hhkpshnqa.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.squadup.gamematch",
+            "certificate_hash": "fd6229b6b81d9802fe5b1a676adc5a624f38298d"
+          }
+        },
+        {
+          "client_id": "142962124885-5as0nm72df2bjrrpv85b88k2skq85dvu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyClGE0Q8ZKoiIoyCj08GqkiOsTaN-oJeRA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "142962124885-5as0nm72df2bjrrpv85b88k2skq85dvu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
     }
   ],
   "configuration_version": "1"

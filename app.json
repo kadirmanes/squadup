@@ -13,14 +13,14 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.squadup.app"
+      "bundleIdentifier": "com.squadup.gamematch"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#080B12"
       },
-      "package": "com.squadup.app",
+      "package": "com.squadup.gamematch",
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.INTERNET",
